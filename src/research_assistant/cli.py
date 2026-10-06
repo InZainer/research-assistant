@@ -215,15 +215,9 @@ def cmd_library(settings: Settings, args) -> int:
 
 
 def make_searcher(settings: Settings, library):
-    from research_assistant.retrieval.search import Searcher
-    from research_assistant.store.vectors import VectorIndex, index_path
+    from research_assistant.agent.session import make_searcher as build
 
-    if not settings.embed_model:
-        return Searcher(library)
-    from research_assistant.nlp.embed import OpenAIEmbedder
-
-    embedder = OpenAIEmbedder(settings.embed_model, settings.embed_base_url, settings.embed_api_key)
-    return Searcher(library, embedder, VectorIndex.load(index_path(settings.vectors_dir, settings.embed_model)))
+    return build(settings, library)
 
 
 def cmd_index(settings: Settings, args) -> int:
@@ -304,6 +298,92 @@ def cmd_eval_retrieval(settings: Settings, args) -> int:
     return 0
 
 
+def print_agent_result(result) -> None:
+    from research_assistant.answer.citations import format_citation
+
+    print()
+    if result.stop_reason != "final_answer":
+        reason = {"max_steps": "исчерпан лимит шагов", "no_final_answer": "модель не оформила ответ с цитатами"}
+        print(f"[!] {reason.get(result.stop_reason, result.stop_reason)} — ответ без проверенных цитат.")
+    print(result.answer or "(пустой ответ)")
+    if result.not_found:
+        print("В библиотеке не нашлось подтверждающих фрагментов.")
+    for number, claim in enumerate(result.claims, 1):
+        print()
+        print(f"{number}. {claim.text}")
+        for citation in claim.citations:
+            print(f"   {format_citation(citation)}")
+    usage = result.usage
+    print()
+    print(f"Шагов {result.steps}, вызовов инструментов {result.tool_calls} (ошибок {result.tool_errors}), "
+          f"токенов {usage.total} (prompt {usage.prompt_tokens}, completion {usage.completion_tokens}), "
+          f"{result.seconds:.1f} с. Журнал: {result.log_path}")
+
+
+def _agent_or_error(settings: Settings, library, external: bool):
+    missing = settings.missing_llm_vars()
+    if missing:
+        print(f"Не заданы переменные: {', '.join(missing)}. Заполните .env по образцу .env.example.")
+        return None
+    from research_assistant.agent.session import make_agent
+
+    return make_agent(settings, library, external=external)
+
+
+def cmd_ask(settings: Settings, args) -> int:
+    from datetime import datetime
+
+    from research_assistant.agent.loop import run_agent
+    from research_assistant.store.db import Library
+
+    with Library(settings.db_path) as library:
+        made = _agent_or_error(settings, library, external=not args.offline)
+        if made is None:
+            return 2
+        ctx, model, http = made
+        log_path = settings.runs_dir / f"ask-{datetime.now():%Y%m%d-%H%M%S}.jsonl"
+        try:
+            result = run_agent(args.question, ctx, model, max_steps=settings.max_steps, log_path=log_path)
+        finally:
+            http.close()
+    print_agent_result(result)
+    return 0 if result.stop_reason == "final_answer" else 1
+
+
+def cmd_chat(settings: Settings, args) -> int:
+    from datetime import datetime
+
+    from research_assistant.agent.loop import run_agent
+    from research_assistant.store.db import Library
+
+    with Library(settings.db_path) as library:
+        made = _agent_or_error(settings, library, external=not args.offline)
+        if made is None:
+            return 2
+        ctx, model, http = made
+        log_path = settings.runs_dir / f"chat-{datetime.now():%Y%m%d-%H%M%S}.jsonl"
+        history: list[dict] = []
+        print(f"Ассистент исследователя (модель {settings.model}). Пустая строка или /exit — выход.")
+        try:
+            while True:
+                try:
+                    question = input("\nВы: ").strip()
+                except EOFError:
+                    break
+                if not question or question in ("/exit", "/quit", "выход"):
+                    break
+                ctx.seen_sentences.clear()  # цитировать можно только то, что найдено для этого вопроса
+                result = run_agent(question, ctx, model, max_steps=settings.max_steps, history=history,
+                                   log_path=log_path)
+                print_agent_result(result)
+                # В историю идут только вопрос и итоговый ответ: выдача инструментов прошлых шагов не раздувает контекст.
+                history += [{"role": "user", "content": question}, {"role": "assistant", "content": result.answer}]
+                history = history[-2 * args.memory:]
+        finally:
+            http.close()
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="research-assistant", description="Ассистент исследователя")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -354,6 +434,14 @@ def main(argv: list[str] | None = None) -> int:
     evaluation.add_argument("--modes", default="bm25,dense,hybrid")
     evaluation.add_argument("--k", type=int, default=10)
 
+    ask = sub.add_parser("ask", help="задать вопрос агенту: ответ с цитатами из библиотеки")
+    ask.add_argument("question")
+    ask.add_argument("--offline", action="store_true", help="без внешнего поиска и добавления статей")
+
+    chat = sub.add_parser("chat", help="диалог с агентом в терминале")
+    chat.add_argument("--offline", action="store_true", help="без внешнего поиска и добавления статей")
+    chat.add_argument("--memory", type=int, default=3, help="сколько прошлых вопросов и ответов помнить")
+
     args = parser.parse_args(argv)
     settings = load_settings()
     if args.command == "check":
@@ -372,6 +460,10 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_search(settings, args)
     if args.command == "eval-retrieval":
         return cmd_eval_retrieval(settings, args)
+    if args.command == "ask":
+        return cmd_ask(settings, args)
+    if args.command == "chat":
+        return cmd_chat(settings, args)
     return 1
 
 

@@ -20,6 +20,7 @@ class Settings:
     openalex_api_key: str | None = None
     embed_base_url: str | None = None
     embed_api_key: str | None = None
+    reasoning_effort: str | None = None
 
     @property
     def db_path(self) -> Path:
@@ -78,4 +79,5 @@ def load_settings(env_file: str | Path | None = ".env") -> Settings:
         # Эмбеддинги можно брать у другого сервиса, чем чат-модель; по умолчанию — у того же.
         embed_base_url=os.getenv("EMBED_BASE_URL") or os.getenv("OPENAI_BASE_URL") or None,
         embed_api_key=os.getenv("EMBED_API_KEY") or os.getenv("OPENAI_API_KEY") or None,
+        reasoning_effort=os.getenv("REASONING_EFFORT") or None,
     )

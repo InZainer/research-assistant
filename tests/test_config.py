@@ -5,7 +5,7 @@ import pytest
 from research_assistant.config import load_settings
 
 ENV_VARS = ["OPENAI_BASE_URL", "OPENAI_API_KEY", "MODEL", "EMBED_MODEL", "DATA_DIR", "RUNS_DIR", "MAX_STEPS", "CONTACT_EMAIL", "OPENALEX_API_KEY",
-            "EMBED_BASE_URL", "EMBED_API_KEY"]
+            "EMBED_BASE_URL", "EMBED_API_KEY", "REASONING_EFFORT"]
 
 
 @pytest.fixture(autouse=True)

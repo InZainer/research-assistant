@@ -9,6 +9,8 @@ import numpy as np
 PREFIXES = [
     ("nomic-embed", "search_query: ", "search_document: "),
     ("e5-", "query: ", "passage: "),
+    # Qwen3-Embedding: инструкция только у запроса, документы без префикса (так в карточке модели).
+    ("qwen3-embedding", "Instruct: Given a question, retrieve passages from scientific papers that answer it\nQuery: ", ""),
 ]
 BATCH_SIZE = 32
 
