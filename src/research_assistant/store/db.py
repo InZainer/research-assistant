@@ -43,6 +43,50 @@ CREATE TABLE IF NOT EXISTS paper_topics (
     added_at TEXT NOT NULL DEFAULT (datetime('now')),
     PRIMARY KEY (paper_id, topic_id)
 );
+
+CREATE TABLE IF NOT EXISTS parses (
+    paper_id INTEGER PRIMARY KEY REFERENCES papers(id) ON DELETE CASCADE,
+    status TEXT NOT NULL,             -- ok | metadata | empty | failed
+    parser TEXT,                      -- pdf | html | metadata
+    parser_version INTEGER NOT NULL,
+    has_abstract INTEGER NOT NULL DEFAULT 0,
+    n_pages INTEGER,
+    error TEXT,
+    parsed_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS sections (
+    id INTEGER PRIMARY KEY,
+    paper_id INTEGER NOT NULL REFERENCES papers(id) ON DELETE CASCADE,
+    order_idx INTEGER NOT NULL,
+    title TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    level INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS passages (
+    id INTEGER PRIMARY KEY,
+    paper_id INTEGER NOT NULL REFERENCES papers(id) ON DELETE CASCADE,
+    section_id INTEGER NOT NULL REFERENCES sections(id) ON DELETE CASCADE,
+    order_idx INTEGER NOT NULL,
+    page INTEGER,
+    kind TEXT NOT NULL,               -- text | caption
+    source TEXT NOT NULL,             -- fulltext | metadata
+    text TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS passages_paper ON passages(paper_id, order_idx);
+
+-- Цитата = sentences.text; это ровно passages.text[char_start:char_end].
+CREATE TABLE IF NOT EXISTS sentences (
+    id INTEGER PRIMARY KEY,
+    passage_id INTEGER NOT NULL REFERENCES passages(id) ON DELETE CASCADE,
+    order_idx INTEGER NOT NULL,
+    char_start INTEGER NOT NULL,
+    char_end INTEGER NOT NULL,
+    page INTEGER,
+    text TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS sentences_passage ON sentences(passage_id, order_idx);
 """
 
 KEY_COLUMNS = {"doi": "doi", "arxiv": "arxiv_id", "openalex": "openalex_id", "title": "title_key"}
@@ -169,6 +213,92 @@ class Library:
                GROUP BY t.id ORDER BY t.created_at, t.id"""
         ).fetchall()
         return [{k: (row[k] or 0) if k != "name" else row[k] for k in row.keys()} for row in rows]
+
+    def papers_to_parse(
+        self, version: int, topic_id: int | None = None, paper_ids: list[int] | None = None, force: bool = False
+    ) -> list[sqlite3.Row]:
+        """Статьи без разбора или разобранные старой версией парсера (или все при force)."""
+        conditions, params = [], []
+        if not force:
+            conditions.append("(r.paper_id IS NULL OR r.parser_version < ?)")
+            params.append(version)
+        if topic_id is not None:
+            conditions.append("p.id IN (SELECT paper_id FROM paper_topics WHERE topic_id = ?)")
+            params.append(topic_id)
+        if paper_ids:
+            conditions.append(f"p.id IN ({','.join('?' * len(paper_ids))})")
+            params.extend(paper_ids)
+        where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+        sql = f"SELECT p.* FROM papers p LEFT JOIN parses r ON r.paper_id = p.id {where} ORDER BY p.id"
+        return self.conn.execute(sql, params).fetchall()
+
+    def save_structure(
+        self,
+        paper_id: int,
+        sections,
+        *,
+        status: str,
+        parser: str | None,
+        version: int,
+        source: str = "fulltext",
+        has_abstract: bool = False,
+        n_pages: int | None = None,
+        error: str | None = None,
+    ) -> dict[str, int]:
+        """Заменяет разбор статьи целиком. sections — список SectionOut из parse.passages."""
+        counts = {"sections": 0, "passages": 0, "sentences": 0}
+        with self.conn:
+            self.conn.execute("DELETE FROM sections WHERE paper_id = ?", (paper_id,))
+            passage_idx = 0
+            for section_idx, section in enumerate(sections):
+                section_id = self.conn.execute(
+                    "INSERT INTO sections(paper_id, order_idx, title, kind, level) VALUES (?, ?, ?, ?, ?)",
+                    (paper_id, section_idx, section.title, section.kind, section.level),
+                ).lastrowid
+                counts["sections"] += 1
+                for passage in section.passages:
+                    passage_id = self.conn.execute(
+                        """INSERT INTO passages(paper_id, section_id, order_idx, page, kind, source, text)
+                           VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                        (paper_id, section_id, passage_idx, passage.page, passage.kind, source, passage.text),
+                    ).lastrowid
+                    passage_idx += 1
+                    self.conn.executemany(
+                        """INSERT INTO sentences(passage_id, order_idx, char_start, char_end, page, text)
+                           VALUES (?, ?, ?, ?, ?, ?)""",
+                        [
+                            (passage_id, i, s.start, s.end, s.page, passage.text[s.start:s.end])
+                            for i, s in enumerate(passage.sentences)
+                        ],
+                    )
+                    counts["passages"] += 1
+                    counts["sentences"] += len(passage.sentences)
+            self.conn.execute(
+                """INSERT OR REPLACE INTO parses(paper_id, status, parser, parser_version, has_abstract, n_pages, error)
+                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                (paper_id, status, parser, version, int(has_abstract), n_pages, error),
+            )
+        return counts
+
+    def paper_structure(self, paper_id: int) -> list[dict]:
+        """Разделы статьи с фрагментами и предложениями — для просмотра и проверки разбора."""
+        sections = []
+        for section in self.conn.execute(
+            "SELECT * FROM sections WHERE paper_id = ? ORDER BY order_idx", (paper_id,)
+        ).fetchall():
+            passages = []
+            for passage in self.conn.execute(
+                "SELECT * FROM passages WHERE section_id = ? ORDER BY order_idx", (section["id"],)
+            ).fetchall():
+                sentences = self.conn.execute(
+                    "SELECT * FROM sentences WHERE passage_id = ? ORDER BY order_idx", (passage["id"],)
+                ).fetchall()
+                passages.append({**dict(passage), "sentences": [dict(s) for s in sentences]})
+            sections.append({**dict(section), "passages": passages})
+        return sections
+
+    def get_parse(self, paper_id: int) -> sqlite3.Row | None:
+        return self.conn.execute("SELECT * FROM parses WHERE paper_id = ?", (paper_id,)).fetchone()
 
     def list_papers(self, topic: str | None = None, limit: int = 50) -> list[sqlite3.Row]:
         if topic is None:

@@ -8,10 +8,13 @@ authors = [
 ]
 requires-python = ">=3.12"
 dependencies = [
+    "beautifulsoup4>=4.15.0",
     "httpx>=0.28.1",
     "openai>=3.24.0",
     "protego>=0.7.0",
+    "pymupdf>=1.28.2",
     "python-dotenv>=1.2.4",
+    "razdel>=0.5.0",
 ]
 
 [project.scripts]
