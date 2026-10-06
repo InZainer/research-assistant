@@ -68,7 +68,7 @@ def _format_passages(ctx: ToolContext, passages: list[dict], numbered: bool = Tr
 
 def search_library(ctx: ToolContext, query: str, k: int = 4, topic: str | None = None,
                    section_kinds: list[str] | None = None, year_from: int | None = None,
-                   year_to: int | None = None, language: str | None = None) -> str:
+                   year_to: int | None = None, language: str | None = None, entity: str | None = None) -> str:
     if not query or not query.strip():
         raise ToolError("query is empty")
     k = max(1, min(int(k), MAX_K))
@@ -80,7 +80,7 @@ def search_library(ctx: ToolContext, query: str, k: int = 4, topic: str | None =
         # (иначе ответ из такой статьи не находится — так было в первых прогонах).
         section_kinds = list(dict.fromkeys([*section_kinds, "body"]))
     where = PassageFilter(topic=topic, year_from=year_from, year_to=year_to,
-                          section_kinds=section_kinds or None, language=language)
+                          section_kinds=section_kinds or None, language=language, entity=entity)
     hits = ctx.searcher.search(query, k=k, mode="hybrid", where=where)
     if not hits:
         return f'No passages found for "{query}". Try other words, English terms, or fewer filters.'
@@ -118,6 +118,23 @@ def read_passage(ctx: ToolContext, passage_id, neighbors: int = 1) -> str:
     return note + _format_passages(ctx, [found[i] for i in ids if i in found], numbered=False)
 
 
+ENTITY_TYPES = ("method", "dataset", "metric", "task")
+
+
+def list_entities(ctx: ToolContext, type: str, topic: str | None = None, limit: int = 15) -> str:
+    if type not in ENTITY_TYPES:
+        raise ToolError(f"unknown type {type!r}; allowed: {', '.join(ENTITY_TYPES)}")
+    rows = ctx.library.entity_stats(type, topic, limit=max(1, min(int(limit), 30)))
+    if not rows:
+        return f"No {type} entities found" + (f' for topic "{topic}"' if topic else "") + ". Papers may be not annotated yet."
+    scope = f' in topic "{topic}"' if topic else ""
+    lines = [f"Most frequent {type} entities{scope} (by number of papers):"]
+    for row in rows:
+        lines.append(f"- {row['name']}: {row['papers']} papers (paper ids {row['paper_ids']}), {row['mentions']} passages")
+    lines.append("To get citable sentences, call search_library with entity=<name>.")
+    return "\n".join(lines)
+
+
 def library_overview(ctx: ToolContext, topic: str | None = None) -> str:
     if topic is None:
         rows = ctx.library.topic_summary()
@@ -129,9 +146,12 @@ def library_overview(ctx: ToolContext, topic: str | None = None) -> str:
     papers = ctx.library.list_papers(topic, limit=40)
     if not papers:
         raise ToolError(f'no topic "{topic}"; call library_overview without topic to list topics')
-    return f'Papers on "{topic}":\n' + "\n".join(
-        f"- paper {p['id']}: {p['title']} ({p['year']}, {p['language'] or '?'})" for p in papers
-    )
+    lines = [f'Papers on "{topic}":']
+    for p in papers:
+        keywords = ctx.library.paper_keywords(p["id"], limit=3)
+        tail = f" — keywords: {', '.join(keywords)}" if keywords else ""
+        lines.append(f"- paper {p['id']}: {p['title']} ({p['year']}, {p['language'] or '?'}){tail}")
+    return "\n".join(lines)
 
 
 def search_external(ctx: ToolContext, query: str, limit: int = 8, year_from: int | None = None,
@@ -191,8 +211,32 @@ SCHEMAS = [
                     "year_from": {"type": "integer"},
                     "year_to": {"type": "integer"},
                     "language": {"type": "string", "enum": ["en", "ru"], "description": "Language of the papers."},
+                    "entity": {
+                        "type": "string",
+                        "description": "Only passages that mention this method/dataset/metric/task, e.g. 'MT-Bench' or 'EAGLE'.",
+                    },
                 },
                 "required": ["query"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_entities",
+            "description": (
+                "List the most frequent annotated entities of one type (method, dataset, metric, task) across the "
+                "library or a topic, with paper counts. Use it for questions like 'which datasets are used to evaluate "
+                "X' or 'which methods exist'; then call search_library with entity=<name> to get citable sentences."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "type": {"type": "string", "enum": list(ENTITY_TYPES)},
+                    "topic": {"type": "string", "description": "Library topic; omit for the whole library."},
+                    "limit": {"type": "integer", "description": "How many entities, 1-30. Default 15."},
+                },
+                "required": ["type"],
             },
         },
     },
@@ -302,6 +346,7 @@ FUNCTIONS: dict[str, Callable] = {
     "search_library": search_library,
     "read_passage": read_passage,
     "library_overview": library_overview,
+    "list_entities": list_entities,
     "search_external": search_external,
     "add_papers": add_papers,
 }

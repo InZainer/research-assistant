@@ -93,6 +93,42 @@ CREATE INDEX IF NOT EXISTS sentences_passage ON sentences(passage_id, order_idx)
 -- Полнотекстовый индекс по основам слов (nlp/text.py), rowid = passages.id.
 -- Колонки: текст фрагмента, заголовок раздела, заголовок статьи — с разными весами в BM25.
 CREATE VIRTUAL TABLE IF NOT EXISTS passages_fts USING fts5(body, section, title, tokenize = 'unicode61');
+
+-- Разметка: сущности статьи (метод, датасет, метрика, задача), их упоминания во фрагментах, ключевые слова.
+-- key — основы слов (nlp/text.py): «диагностики» и «диагностика» дают один ключ.
+CREATE TABLE IF NOT EXISTS entities (
+    id INTEGER PRIMARY KEY,
+    paper_id INTEGER NOT NULL REFERENCES papers(id) ON DELETE CASCADE,
+    type TEXT NOT NULL,
+    name TEXT NOT NULL,
+    key TEXT NOT NULL,
+    UNIQUE (paper_id, type, key)
+);
+CREATE INDEX IF NOT EXISTS entities_key ON entities(type, key);
+
+CREATE TABLE IF NOT EXISTS entity_mentions (
+    entity_id INTEGER NOT NULL REFERENCES entities(id) ON DELETE CASCADE,
+    passage_id INTEGER NOT NULL REFERENCES passages(id) ON DELETE CASCADE,
+    PRIMARY KEY (entity_id, passage_id)
+);
+CREATE INDEX IF NOT EXISTS entity_mentions_passage ON entity_mentions(passage_id);
+
+CREATE TABLE IF NOT EXISTS keywords (
+    paper_id INTEGER NOT NULL REFERENCES papers(id) ON DELETE CASCADE,
+    keyword TEXT NOT NULL,
+    score REAL NOT NULL,
+    PRIMARY KEY (paper_id, keyword)
+);
+
+CREATE TABLE IF NOT EXISTS annotations (
+    paper_id INTEGER PRIMARY KEY REFERENCES papers(id) ON DELETE CASCADE,
+    status TEXT NOT NULL,             -- ok | failed
+    annotator TEXT,                   -- модель
+    version INTEGER NOT NULL,
+    dropped INTEGER NOT NULL DEFAULT 0,  -- сколько сущностей отброшено: нет в тексте
+    error TEXT,
+    annotated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
 """
 
 # Веса колонок passages_fts в BM25: текст важнее заголовков.
@@ -110,6 +146,7 @@ class PassageFilter:
     language: str | None = None
     paper_ids: list[int] | None = None
     include_captions: bool = True
+    entity: str | None = None  # фрагменты, где упоминается сущность (по основам слов, допускается часть: «eagle» → «EAGLE-2»)
 
     def sql(self) -> tuple[str, list]:
         """Условие WHERE над алиасами p (passages), s (sections), pa (papers)."""
@@ -137,6 +174,13 @@ class PassageFilter:
             params.extend(self.paper_ids)
         if not self.include_captions:
             conditions.append("p.kind = 'text'")
+        if self.entity:
+            key = " ".join(analyze(self.entity))
+            conditions.append(
+                "p.id IN (SELECT m.passage_id FROM entity_mentions m JOIN entities e ON e.id = m.entity_id"
+                " WHERE e.key = ? OR (' ' || e.key || ' ') LIKE ?)"
+            )
+            params.extend([key, f"% {key} %"])
         return (" AND ".join(conditions) or "1"), params
 
 
@@ -358,6 +402,8 @@ class Library:
                    VALUES (?, ?, ?, ?, ?, ?, ?)""",
                 (paper_id, status, parser, version, int(has_abstract), n_pages, error),
             )
+            # Переразбор удалил фрагменты, а с ними упоминания сущностей: восстанавливаем по новым фрагментам.
+            self._link_mentions(paper_id)
         return counts
 
     def paper_structure(self, paper_id: int) -> list[dict]:
@@ -422,6 +468,116 @@ class Library:
             ids,
         ).fetchall()
         return {r["id"]: dict(r) for r in rows}
+
+    def save_annotation(
+        self,
+        paper_id: int,
+        entities: dict[str, list[str]],
+        keywords: list[tuple[str, float]],
+        *,
+        status: str,
+        annotator: str | None,
+        version: int,
+        dropped: int = 0,
+        error: str | None = None,
+    ) -> int:
+        """Заменяет разметку статьи. Возвращает число упоминаний сущностей во фрагментах."""
+        with self.conn:
+            self.conn.execute("DELETE FROM entities WHERE paper_id = ?", (paper_id,))
+            self.conn.execute("DELETE FROM keywords WHERE paper_id = ?", (paper_id,))
+            for entity_type, names in entities.items():
+                for name in names:
+                    key = " ".join(analyze(name))
+                    if key:
+                        self.conn.execute(
+                            "INSERT OR IGNORE INTO entities(paper_id, type, name, key) VALUES (?, ?, ?, ?)",
+                            (paper_id, entity_type, name, key),
+                        )
+            self.conn.executemany(
+                "INSERT OR IGNORE INTO keywords(paper_id, keyword, score) VALUES (?, ?, ?)",
+                [(paper_id, keyword, score) for keyword, score in keywords],
+            )
+            mentions = self._link_mentions(paper_id)
+            self.conn.execute(
+                """INSERT OR REPLACE INTO annotations(paper_id, status, annotator, version, dropped, error)
+                   VALUES (?, ?, ?, ?, ?, ?)""",
+                (paper_id, status, annotator, version, dropped, error),
+            )
+        return mentions
+
+    def _link_mentions(self, paper_id: int) -> int:
+        """Привязывает сущности статьи ко всем её фрагментам, где они встречаются (основы слов подряд)."""
+        from research_assistant.nlp.entities import contains_stems
+
+        entities = self.conn.execute("SELECT id, key FROM entities WHERE paper_id = ?", (paper_id,)).fetchall()
+        if not entities:
+            return 0
+        self.conn.execute(
+            "DELETE FROM entity_mentions WHERE entity_id IN (SELECT id FROM entities WHERE paper_id = ?)", (paper_id,)
+        )
+        passages = self.conn.execute("SELECT id, text FROM passages WHERE paper_id = ?", (paper_id,)).fetchall()
+        stems = {row["id"]: analyze(row["text"]) for row in passages}
+        pairs = [
+            (entity["id"], passage_id)
+            for entity in entities
+            for passage_id, passage_stems in stems.items()
+            if contains_stems(passage_stems, entity["key"].split())
+        ]
+        self.conn.executemany("INSERT OR IGNORE INTO entity_mentions(entity_id, passage_id) VALUES (?, ?)", pairs)
+        return len(pairs)
+
+    def papers_to_annotate(
+        self, version: int, topic_id: int | None = None, paper_ids: list[int] | None = None, force: bool = False
+    ) -> list[sqlite3.Row]:
+        """Разобранные статьи без разметки или с разметкой старой версии (или все при force)."""
+        conditions, params = ["r.status IN ('ok', 'metadata')"], []
+        if not force:
+            conditions.append("(a.paper_id IS NULL OR a.version < ? OR a.status = 'failed')")  # сбой — повторить
+            params.append(version)
+        if topic_id is not None:
+            conditions.append("p.id IN (SELECT paper_id FROM paper_topics WHERE topic_id = ?)")
+            params.append(topic_id)
+        if paper_ids:
+            conditions.append(f"p.id IN ({','.join('?' * len(paper_ids))})")
+            params.extend(paper_ids)
+        sql = f"""SELECT p.* FROM papers p JOIN parses r ON r.paper_id = p.id
+                  LEFT JOIN annotations a ON a.paper_id = p.id WHERE {' AND '.join(conditions)} ORDER BY p.id"""
+        return self.conn.execute(sql, params).fetchall()
+
+    def paper_entities(self, paper_id: int) -> dict[str, list[str]]:
+        result: dict[str, list[str]] = {}
+        for row in self.conn.execute("SELECT type, name FROM entities WHERE paper_id = ? ORDER BY id", (paper_id,)):
+            result.setdefault(row["type"], []).append(row["name"])
+        return result
+
+    def paper_keywords(self, paper_id: int, limit: int = 10) -> list[str]:
+        rows = self.conn.execute(
+            "SELECT keyword FROM keywords WHERE paper_id = ? ORDER BY score LIMIT ?", (paper_id, limit)
+        )
+        return [r["keyword"] for r in rows]
+
+    def entity_stats(self, entity_type: str | None = None, topic: str | None = None, limit: int = 20) -> list[dict]:
+        """Сущности по числу статей: какие датасеты/методы/метрики встречаются в библиотеке или теме."""
+        conditions, params = [], []
+        if entity_type:
+            conditions.append("e.type = ?")
+            params.append(entity_type)
+        if topic:
+            conditions.append(
+                "e.paper_id IN (SELECT pt.paper_id FROM paper_topics pt JOIN topics t ON t.id = pt.topic_id WHERE t.name = ?)"
+            )
+            params.append(" ".join(topic.split()))
+        where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+        rows = self.conn.execute(
+            f"""SELECT e.type, e.key, MIN(e.name) AS name, COUNT(DISTINCT e.paper_id) AS papers,
+                       GROUP_CONCAT(DISTINCT e.paper_id) AS paper_ids,
+                       (SELECT COUNT(*) FROM entity_mentions m JOIN entities e2 ON e2.id = m.entity_id
+                        WHERE e2.type = e.type AND e2.key = e.key) AS mentions
+                FROM entities e {where}
+                GROUP BY e.type, e.key ORDER BY papers DESC, mentions DESC LIMIT ?""",
+            [*params, limit],
+        ).fetchall()
+        return [dict(r) for r in rows]
 
     def get_parse(self, paper_id: int) -> sqlite3.Row | None:
         return self.conn.execute("SELECT * FROM parses WHERE paper_id = ?", (paper_id,)).fetchone()

@@ -123,6 +123,15 @@ def cmd_ingest(settings: Settings, args) -> int:
                 print()
                 print("Разбор полных текстов:")
                 parsed = parse_papers(library, topic_id=library.get_or_create_topic(args.topic), log=print)
+            if args.annotate and not settings.missing_llm_vars():
+                from research_assistant.llm import ChatModel
+                from research_assistant.nlp.annotate import annotate_papers
+
+                print()
+                print("Разметка:")
+                model = ChatModel(settings.model, settings.base_url, settings.api_key,
+                                  reasoning_effort=settings.reasoning_effort)
+                annotate_papers(library, model, topic_id=library.get_or_create_topic(args.topic), log=print)
     finally:
         http.close()
 
@@ -171,6 +180,13 @@ def cmd_show(settings: Settings, args) -> int:
         if parse is None:
             print("Ещё не разобрана: выполните parse.")
             return 0
+        entities = library.paper_entities(args.paper_id)
+        if entities:
+            for entity_type, names in entities.items():
+                print(f"{entity_type}: {'; '.join(names)}")
+        keywords = library.paper_keywords(args.paper_id)
+        if keywords:
+            print(f"ключевые слова: {'; '.join(keywords)}")
         print(f"Разбор: {parse['status']}, парсер {parse['parser']} v{parse['parser_version']}, "
               f"страниц {parse['n_pages']}, аннотация {'есть' if parse['has_abstract'] else 'нет'}"
               + (f", ошибка: {parse['error']}" if parse["error"] else ""))
@@ -243,7 +259,7 @@ def search_filter(args):
 
     return PassageFilter(
         topic=args.topic, year_from=args.year_from, year_to=args.year_to,
-        section_kinds=args.section, language=args.language,
+        section_kinds=args.section, language=args.language, entity=args.entity,
     )
 
 
@@ -384,6 +400,72 @@ def cmd_chat(settings: Settings, args) -> int:
     return 0
 
 
+def cmd_eval_entities(settings: Settings, args) -> int:
+    import json
+    from datetime import datetime
+
+    from research_assistant.evaluation.entities import evaluate_entities, format_entity_report, load_gold
+    from research_assistant.llm import ChatModel
+
+    model_name = args.model or settings.model
+    if not model_name or not settings.api_key:
+        print("Не задана модель: укажите --model или MODEL и OPENAI_API_KEY в .env.")
+        return 2
+    model = ChatModel(model_name, settings.base_url, settings.api_key, reasoning_effort=settings.reasoning_effort)
+    report = evaluate_entities(model, load_gold(args.file), log=print)
+    print(format_entity_report(report))
+    settings.runs_dir.mkdir(parents=True, exist_ok=True)
+    out = settings.runs_dir / f"entities-{model_name.replace('/', '_')}-{datetime.now():%Y%m%d-%H%M%S}.json"
+    out.write_text(json.dumps(report, ensure_ascii=False, indent=1), encoding="utf-8")
+    print(f"Подробности: {out}")
+    return 0
+
+
+def _topic_id(library, topic: str | None) -> int | None | bool:
+    """id темы; None — тема не задана; False — темы нет."""
+    if not topic:
+        return None
+    row = library.conn.execute("SELECT id FROM topics WHERE name = ?", (" ".join(topic.split()),)).fetchone()
+    if row is None:
+        print(f"Темы «{topic}» нет в библиотеке.")
+        return False
+    return row["id"]
+
+
+def cmd_annotate(settings: Settings, args) -> int:
+    from research_assistant.llm import ChatModel
+    from research_assistant.nlp.annotate import annotate_papers
+    from research_assistant.store.db import Library
+
+    model_name = args.model or settings.model
+    if not model_name or not settings.api_key:
+        print("Не задана модель: укажите --model или MODEL и OPENAI_API_KEY в .env.")
+        return 2
+    model = ChatModel(model_name, settings.base_url, settings.api_key, reasoning_effort=settings.reasoning_effort)
+    with Library(settings.db_path) as library:
+        topic_id = _topic_id(library, args.topic)
+        if topic_id is False:
+            return 2
+        statuses = annotate_papers(library, model, topic_id=topic_id, paper_ids=args.paper, force=args.force, log=print)
+    if not statuses:
+        print("Размечать нечего: все разобранные статьи уже размечены текущей версией (используйте --force).")
+    else:
+        print("Итого: " + ", ".join(f"{k} {v}" for k, v in sorted(statuses.items())))
+    return 0
+
+
+def cmd_entities(settings: Settings, args) -> int:
+    from research_assistant.store.db import Library
+
+    with Library(settings.db_path) as library:
+        rows = library.entity_stats(args.type, args.topic, limit=args.limit)
+    if not rows:
+        print("Сущностей нет: выполните annotate.")
+    for row in rows:
+        print(f"{row['type']:<8} {row['name'][:50]:<50} статей {row['papers']:>3}, упоминаний {row['mentions']:>4}")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="research-assistant", description="Ассистент исследователя")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -401,6 +483,7 @@ def main(argv: list[str] | None = None) -> int:
     ingest.add_argument("--retry-failed", action="store_true", help="повторить неудачные скачивания")
     ingest.add_argument("--refresh", action="store_true", help="не брать ответы источников из кэша")
     ingest.add_argument("--no-parse", action="store_true", help="не разбирать полные тексты после скачивания")
+    ingest.add_argument("--annotate", action="store_true", help="разметить новые статьи моделью из .env")
 
     parse = sub.add_parser("parse", help="разобрать полные тексты на разделы, фрагменты и предложения")
     parse.add_argument("--topic", help="только статьи темы")
@@ -427,6 +510,7 @@ def main(argv: list[str] | None = None) -> int:
     search.add_argument("--year-to", type=int)
     search.add_argument("--section", action="append", help="тип раздела: method, results, limitations…")
     search.add_argument("--language", help="язык статьи: en, ru")
+    search.add_argument("--entity", help="только фрагменты, где упоминается сущность, например MT-Bench")
     search.add_argument("--max-chars", type=int, default=300)
 
     evaluation = sub.add_parser("eval-retrieval", help="оценить поиск на золотом наборе вопросов")
@@ -441,6 +525,21 @@ def main(argv: list[str] | None = None) -> int:
     chat = sub.add_parser("chat", help="диалог с агентом в терминале")
     chat.add_argument("--offline", action="store_true", help="без внешнего поиска и добавления статей")
     chat.add_argument("--memory", type=int, default=3, help="сколько прошлых вопросов и ответов помнить")
+
+    eval_entities = sub.add_parser("eval-entities", help="оценить извлечение сущностей на золотом наборе")
+    eval_entities.add_argument("--file", default="eval/entities_gold.jsonl")
+    eval_entities.add_argument("--model", help="чат-модель; по умолчанию MODEL из .env")
+
+    annotate = sub.add_parser("annotate", help="разметить статьи: сущности (модель) и ключевые слова (YAKE)")
+    annotate.add_argument("--topic")
+    annotate.add_argument("--paper", type=int, action="append")
+    annotate.add_argument("--force", action="store_true", help="переразметить уже размеченные")
+    annotate.add_argument("--model", help="чат-модель; по умолчанию MODEL из .env")
+
+    entities = sub.add_parser("entities", help="сущности библиотеки по числу статей")
+    entities.add_argument("--type", choices=("method", "dataset", "metric", "task"))
+    entities.add_argument("--topic")
+    entities.add_argument("--limit", type=int, default=25)
 
     args = parser.parse_args(argv)
     settings = load_settings()
@@ -460,6 +559,12 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_search(settings, args)
     if args.command == "eval-retrieval":
         return cmd_eval_retrieval(settings, args)
+    if args.command == "annotate":
+        return cmd_annotate(settings, args)
+    if args.command == "entities":
+        return cmd_entities(settings, args)
+    if args.command == "eval-entities":
+        return cmd_eval_entities(settings, args)
     if args.command == "ask":
         return cmd_ask(settings, args)
     if args.command == "chat":

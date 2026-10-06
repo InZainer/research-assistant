@@ -156,7 +156,8 @@ def test_history_and_reasoning_effort_reach_the_model(ctx):
     request = client.requests[0]
     assert [m["role"] for m in request["messages"]] == ["system", "user", "assistant", "user"]
     assert request["extra_body"] == {"reasoning_effort": "none"}
-    assert {t["function"]["name"] for t in request["tools"]} == {"search_library", "read_passage", "library_overview", "final_answer"}
+    assert {t["function"]["name"] for t in request["tools"]} == {
+        "search_library", "read_passage", "library_overview", "list_entities", "final_answer"}
 
 
 # --- инструменты ---

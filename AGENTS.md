@@ -10,6 +10,7 @@
 - Сбор и разбор: `uv run research-assistant ingest "<тема>"`, `parse`, `show <id>` (подробнее в README)
 - Поиск и его оценка: `search "<запрос>"`, `index` (эмбеддинги), `eval-retrieval`
 - Агент: `ask "<вопрос>"`, `chat`; журналы прогонов в `runs/*.jsonl`
+- Разметка: `annotate`, `entities`, `eval-entities`; при изменении промпта или правил — увеличить `ANNOTATOR_VERSION` в `nlp/annotate.py`
 
 ## Где что лежит
 
