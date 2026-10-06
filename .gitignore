@@ -1,0 +1,21 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+.pytest_cache/
+
+# Virtual environments
+.venv
+
+# Секреты
+.env
+
+# Данные: PDF, база, векторы, кэш внешних API
+data/
+
+# Журналы прогонов: в git только то, что нужно для отчёта (добавлять через git add -f)
+runs/*
+!runs/.gitkeep

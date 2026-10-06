@@ -1,0 +1,27 @@
+[project]
+name = "research-assistant"
+version = "0.1.0"
+description = "Ассистент исследователя: сбор статей, разметка и ответы точными цитатами"
+readme = "README.md"
+authors = [
+    { name = "InZainer", email = "samezain@yandex.ru" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "httpx>=0.28.1",
+    "openai>=3.24.0",
+    "protego>=0.7.0",
+    "python-dotenv>=1.2.4",
+]
+
+[project.scripts]
+research-assistant = "research_assistant.cli:main"
+
+[build-system]
+requires = ["uv_build>=0.11.18,<0.12.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+]

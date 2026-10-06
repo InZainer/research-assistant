@@ -1,0 +1,1005 @@
+{
+ "meta": {
+  "count": 13636
+ },
+ "results": [
+  {
+   "id": "https://openalex.org/W7133563540",
+   "doi": "https://doi.org/10.48550/arxiv.2603.03251",
+   "display_name": "Speculative Speculative Decoding",
+   "publication_year": 2026,
+   "language": null,
+   "type": "preprint",
+   "authorships": [
+    {
+     "author": {
+      "display_name": "Tanishq Kumar"
+     }
+    },
+    {
+     "author": {
+      "display_name": "Tri Dao"
+     }
+    },
+    {
+     "author": {
+      "display_name": "Avner May"
+     }
+    }
+   ],
+   "abstract_inverted_index": {
+    "Autoregressive": [
+     0
+    ],
+    "decoding": [
+     1,
+     9
+    ],
+    "is": [
+     2
+    ],
+    "bottlenecked": [
+     3
+    ],
+    "by": [
+     4,
+     18
+    ],
+    "its": [
+     5
+    ],
+    "sequential": [
+     6
+    ],
+    "nature.": [
+     7
+    ],
+    "Speculative": [
+     8
+    ],
+    "has": [
+     10
+    ],
+    "become": [
+     11
+    ],
+    "a": [
+     12,
+     20,
+     29
+    ],
+    "standard": [
+     13
+    ],
+    "way": [
+     14
+    ],
+    "to": [
+     15,
+     24
+    ],
+    "accelerate": [
+     16
+    ],
+    "inference": [
+     17
+    ],
+    "using": [
+     19
+    ],
+    "fast": [
+     21
+    ],
+    "draft": [
+     22
+    ],
+    "model": [
+     23
+    ],
+    "predict": [
+     25
+    ],
+    "upcoming": [
+     26
+    ],
+    "tokens": [
+     27
+    ],
+    "from": [
+     28
+    ],
+    "slower": [
+     30
+    ],
+    "target": [
+     31
+    ],
+    "model,": [
+     32
+    ],
+    "and": [
+     33
+    ],
+    "then": [
+     34
+    ],
+    "verifying": [
+     35
+    ],
+    "them": [
+     36
+    ],
+    "in": [
+     37
+    ],
+    "parallel": [
+     38
+    ],
+    "with": [
+     39
+    ]
+   },
+   "primary_location": {
+    "landing_page_url": "https://arxiv.org/abs/2603.03251",
+    "pdf_url": "https://arxiv.org/pdf/2603.03251",
+    "is_oa": true,
+    "source": {
+     "display_name": "arXiv (Cornell University)"
+    }
+   },
+   "best_oa_location": {
+    "landing_page_url": "https://arxiv.org/abs/2603.03251",
+    "pdf_url": "https://arxiv.org/pdf/2603.03251",
+    "is_oa": true,
+    "source": {
+     "display_name": "arXiv (Cornell University)"
+    }
+   },
+   "locations": [
+    {
+     "landing_page_url": "https://arxiv.org/abs/2603.03251",
+     "pdf_url": "https://arxiv.org/pdf/2603.03251",
+     "is_oa": true,
+     "source": {
+      "display_name": "arXiv (Cornell University)"
+     }
+    },
+    {
+     "landing_page_url": "https://doi.org/10.48550/arxiv.2603.03251",
+     "pdf_url": null,
+     "is_oa": true,
+     "source": {
+      "display_name": "arXiv (Cornell University)"
+     }
+    }
+   ]
+  },
+  {
+   "id": "https://openalex.org/W4391556558",
+   "doi": "https://doi.org/10.48550/arxiv.2402.01528",
+   "display_name": "Decoding Speculative Decoding",
+   "publication_year": 2024,
+   "language": "en",
+   "type": "preprint",
+   "authorships": [
+    {
+     "author": {
+      "display_name": "Minghao Yan"
+     }
+    },
+    {
+     "author": {
+      "display_name": "Agarwal, Saurabh"
+     }
+    },
+    {
+     "author": {
+      "display_name": "Shivaram Venkataraman"
+     }
+    }
+   ],
+   "abstract_inverted_index": {
+    "Speculative": [
+     0
+    ],
+    "Decoding": [
+     1
+    ],
+    "is": [
+     2
+    ],
+    "a": [
+     3,
+     25
+    ],
+    "widely": [
+     4
+    ],
+    "used": [
+     5
+    ],
+    "technique": [
+     6
+    ],
+    "to": [
+     7,
+     29,
+     39
+    ],
+    "speed": [
+     8
+    ],
+    "up": [
+     9
+    ],
+    "inference": [
+     10
+    ],
+    "for": [
+     11
+    ],
+    "Large": [
+     12
+    ],
+    "Language": [
+     13
+    ],
+    "Models": [
+     14
+    ],
+    "(LLMs)": [
+     15
+    ],
+    "without": [
+     16
+    ],
+    "sacrificing": [
+     17
+    ],
+    "quality.": [
+     18
+    ],
+    "When": [
+     19
+    ],
+    "performing": [
+     20
+    ],
+    "inference,": [
+     21
+    ],
+    "speculative": [
+     22,
+     31
+    ],
+    "decoding": [
+     23
+    ],
+    "uses": [
+     24,
+     35
+    ],
+    "smaller": [
+     26
+    ],
+    "draft": [
+     27
+    ],
+    "model": [
+     28
+    ],
+    "generate": [
+     30
+    ],
+    "tokens": [
+     32
+    ],
+    "and": [
+     33
+    ],
+    "then": [
+     34
+    ],
+    "the": [
+     36
+    ],
+    "target": [
+     37
+    ],
+    "LLM": [
+     38
+    ]
+   },
+   "primary_location": {
+    "landing_page_url": "http://arxiv.org/abs/2402.01528",
+    "pdf_url": "https://arxiv.org/pdf/2402.01528",
+    "is_oa": true,
+    "source": {
+     "display_name": "arXiv (Cornell University)"
+    }
+   },
+   "best_oa_location": {
+    "landing_page_url": "http://arxiv.org/abs/2402.01528",
+    "pdf_url": "https://arxiv.org/pdf/2402.01528",
+    "is_oa": true,
+    "source": {
+     "display_name": "arXiv (Cornell University)"
+    }
+   },
+   "locations": [
+    {
+     "landing_page_url": "http://arxiv.org/abs/2402.01528",
+     "pdf_url": "https://arxiv.org/pdf/2402.01528",
+     "is_oa": true,
+     "source": {
+      "display_name": "arXiv (Cornell University)"
+     }
+    },
+    {
+     "landing_page_url": "https://doi.org/10.48550/arxiv.2402.01528",
+     "pdf_url": null,
+     "is_oa": true,
+     "source": {
+      "display_name": "arXiv (Cornell University)"
+     }
+    }
+   ]
+  },
+  {
+   "id": "https://openalex.org/W7214036691",
+   "doi": "https://doi.org/10.3929/ethz-c-000806091",
+   "display_name": "Decoding speculative decoding",
+   "publication_year": 2025,
+   "language": "en",
+   "type": "conference-paper",
+   "authorships": [
+    {
+     "author": {
+      "display_name": "Minghao Yan"
+     }
+    },
+    {
+     "author": {
+      "display_name": "Saurabh Agarwal"
+     }
+    },
+    {
+     "author": {
+      "display_name": "Shivaram Venkataraman"
+     }
+    }
+   ],
+   "abstract_inverted_index": {
+    "Speculative": [
+     0
+    ],
+    "Decoding": [
+     1
+    ],
+    "is": [
+     2
+    ],
+    "a": [
+     3,
+     25
+    ],
+    "widely": [
+     4
+    ],
+    "used": [
+     5
+    ],
+    "technique": [
+     6
+    ],
+    "to": [
+     7,
+     29,
+     39
+    ],
+    "speed": [
+     8
+    ],
+    "up": [
+     9
+    ],
+    "inference": [
+     10
+    ],
+    "for": [
+     11
+    ],
+    "Large": [
+     12
+    ],
+    "Language": [
+     13
+    ],
+    "Models": [
+     14
+    ],
+    "(LLMs)": [
+     15
+    ],
+    "without": [
+     16
+    ],
+    "sacrificing": [
+     17
+    ],
+    "quality.": [
+     18
+    ],
+    "When": [
+     19
+    ],
+    "performing": [
+     20
+    ],
+    "inference,": [
+     21
+    ],
+    "speculative": [
+     22,
+     31
+    ],
+    "decoding": [
+     23
+    ],
+    "uses": [
+     24,
+     35
+    ],
+    "smaller": [
+     26
+    ],
+    "draft": [
+     27
+    ],
+    "model": [
+     28
+    ],
+    "generate": [
+     30
+    ],
+    "tokens": [
+     32
+    ],
+    "and": [
+     33
+    ],
+    "then": [
+     34
+    ],
+    "the": [
+     36
+    ],
+    "target": [
+     37
+    ],
+    "LLM": [
+     38
+    ]
+   },
+   "primary_location": {
+    "landing_page_url": "http://hdl.handle.net/20.500.11850/806091",
+    "pdf_url": null,
+    "is_oa": true,
+    "source": {
+     "display_name": "Repository for Publications and Research Data (ETH Zurich)"
+    }
+   },
+   "best_oa_location": {
+    "landing_page_url": "http://hdl.handle.net/20.500.11850/806091",
+    "pdf_url": null,
+    "is_oa": true,
+    "source": {
+     "display_name": "Repository for Publications and Research Data (ETH Zurich)"
+    }
+   },
+   "locations": [
+    {
+     "landing_page_url": "http://hdl.handle.net/20.500.11850/806091",
+     "pdf_url": null,
+     "is_oa": true,
+     "source": {
+      "display_name": "Repository for Publications and Research Data (ETH Zurich)"
+     }
+    },
+    {
+     "landing_page_url": "https://doi.org/10.3929/ethz-c-000806091",
+     "pdf_url": null,
+     "is_oa": true,
+     "source": {
+      "display_name": "ETH Zürich Research Collection"
+     }
+    }
+   ]
+  },
+  {
+   "id": "https://openalex.org/W4385589746",
+   "doi": "https://doi.org/10.18411/trnio-12-2022-491",
+   "display_name": "Большие данные и машинное обучение",
+   "publication_year": 2022,
+   "language": "ru",
+   "type": "article",
+   "authorships": [
+    {
+     "author": {
+      "display_name": "И.Р. Ибрагимов"
+     }
+    },
+    {
+     "author": {
+      "display_name": "М.С. Шахбазова"
+     }
+    }
+   ],
+   "abstract_inverted_index": {
+    "Машинное": [
+     0,
+     20
+    ],
+    "обучение": [
+     1,
+     21
+    ],
+    "и": [
+     2,
+     13,
+     25
+    ],
+    "большие": [
+     3
+    ],
+    "данные": [
+     4
+    ],
+    "являются": [
+     5
+    ],
+    "трендом": [
+     6
+    ],
+    "современной": [
+     7
+    ],
+    "ИТ-индустрии.": [
+     8
+    ],
+    "Хранилища": [
+     9
+    ],
+    "больших": [
+     10
+    ],
+    "данных": [
+     11
+    ],
+    "анализируют": [
+     12
+    ],
+    "извлекают": [
+     14
+    ],
+    "информацию": [
+     15
+    ],
+    "из": [
+     16
+    ],
+    "массивных": [
+     17
+    ],
+    "наборов": [
+     18
+    ],
+    "данных.": [
+     19
+    ],
+    "позволяет": [
+     22
+    ],
+    "автоматически": [
+     23
+    ],
+    "учиться": [
+     24
+    ],
+    "совершенствоваться": [
+     26
+    ],
+    "без": [
+     27
+    ],
+    "явного": [
+     28
+    ],
+    "опыта": [
+     29
+    ],
+    "программирования.": [
+     30
+    ]
+   },
+   "primary_location": {
+    "landing_page_url": "http://doi.org/10.18411/trnio-12-2022-491",
+    "pdf_url": "http://dx.doi.org/10.18411/trnio-12-2022-491",
+    "is_oa": true,
+    "source": {
+     "display_name": "ТЕНДЕНЦИИ РАЗВИТИЯ НАУКИ И ОБРАЗОВАНИЯ"
+    }
+   },
+   "best_oa_location": {
+    "landing_page_url": "http://doi.org/10.18411/trnio-12-2022-491",
+    "pdf_url": "http://dx.doi.org/10.18411/trnio-12-2022-491",
+    "is_oa": true,
+    "source": {
+     "display_name": "ТЕНДЕНЦИИ РАЗВИТИЯ НАУКИ И ОБРАЗОВАНИЯ"
+    }
+   },
+   "locations": [
+    {
+     "landing_page_url": "http://doi.org/10.18411/trnio-12-2022-491",
+     "pdf_url": "http://dx.doi.org/10.18411/trnio-12-2022-491",
+     "is_oa": true,
+     "source": {
+      "display_name": "ТЕНДЕНЦИИ РАЗВИТИЯ НАУКИ И ОБРАЗОВАНИЯ"
+     }
+    }
+   ]
+  },
+  {
+   "id": "https://openalex.org/W4404831617",
+   "doi": "https://doi.org/10.47813/2782-5280-2024-3-4-0313-0321",
+   "display_name": "Машинное обучение в бизнес-аналитике",
+   "publication_year": 2024,
+   "language": "ru",
+   "type": "article",
+   "authorships": [
+    {
+     "author": {
+      "display_name": "Игорь Николаевич Карцан"
+     }
+    },
+    {
+     "author": {
+      "display_name": "С. А. Нуриев"
+     }
+    }
+   ],
+   "abstract_inverted_index": {
+    "Машинное": [
+     0
+    ],
+    "обучение": [
+     1
+    ],
+    "включает": [
+     2
+    ],
+    "использование": [
+     3
+    ],
+    "алгоритмов": [
+     4
+    ],
+    "и": [
+     5,
+     37
+    ],
+    "статистических": [
+     6
+    ],
+    "моделей,": [
+     7
+    ],
+    "которые": [
+     8,
+     39
+    ],
+    "позволяют": [
+     9
+    ],
+    "компьютерам": [
+     10
+    ],
+    "повысить": [
+     11
+    ],
+    "эффективность": [
+     12
+    ],
+    "выполнения": [
+     13
+    ],
+    "задач": [
+     14
+    ],
+    "на": [
+     15
+    ],
+    "основе": [
+     16
+    ],
+    "опыта,": [
+     17
+    ],
+    "накопленного": [
+     18
+    ],
+    "с": [
+     19
+    ],
+    "помощью": [
+     20
+    ],
+    "данных.": [
+     21
+    ],
+    "При": [
+     22
+    ],
+    "интеграции": [
+     23
+    ],
+    "в": [
+     24
+    ],
+    "бизнес-аналитику": [
+     25
+    ],
+    "алгоритмы": [
+     26
+    ],
+    "машинного": [
+     27
+    ],
+    "обучения": [
+     28
+    ],
+    "анализируют": [
+     29
+    ],
+    "обширные": [
+     30
+    ],
+    "массивы": [
+     31
+    ],
+    "данных,": [
+     32
+    ],
+    "чтобы": [
+     33
+    ],
+    "выявить": [
+     34
+    ],
+    "закономерности,": [
+     35
+    ],
+    "корреляции": [
+     36
+    ],
+    "выводы,": [
+     38
+    ]
+   },
+   "primary_location": {
+    "landing_page_url": "https://doi.org/10.47813/2782-5280-2024-3-4-0313-0321",
+    "pdf_url": "https://oajiem.com/index.php/24/article/download/106/110",
+    "is_oa": true,
+    "source": {
+     "display_name": "Информатика Экономика Управление - Informatics Economics Management"
+    }
+   },
+   "best_oa_location": {
+    "landing_page_url": "https://doi.org/10.47813/2782-5280-2024-3-4-0313-0321",
+    "pdf_url": "https://oajiem.com/index.php/24/article/download/106/110",
+    "is_oa": true,
+    "source": {
+     "display_name": "Информатика Экономика Управление - Informatics Economics Management"
+    }
+   },
+   "locations": [
+    {
+     "landing_page_url": "https://doi.org/10.47813/2782-5280-2024-3-4-0313-0321",
+     "pdf_url": "https://oajiem.com/index.php/24/article/download/106/110",
+     "is_oa": true,
+     "source": {
+      "display_name": "Информатика Экономика Управление - Informatics Economics Management"
+     }
+    },
+    {
+     "landing_page_url": "https://cyberleninka.ru/article/n/mashinnoe-obuchenie-v-biznes-analitike",
+     "pdf_url": null,
+     "is_oa": false,
+     "source": {
+      "display_name": "CyberLeninK (CyberLeninka)"
+     }
+    },
+    {
+     "landing_page_url": "https://doaj.org/article/01442af2e5da44c9a3c3ea6200996a80",
+     "pdf_url": null,
+     "is_oa": true,
+     "source": {
+      "display_name": "DOAJ (DOAJ: Directory of Open Access Journals)"
+     }
+    }
+   ]
+  },
+  {
+   "id": "https://openalex.org/W2894934818",
+   "doi": null,
+   "display_name": "Машинное обучение в бизнесе",
+   "publication_year": 2018,
+   "language": "ru",
+   "type": "article",
+   "authorships": [
+    {
+     "author": {
+      "display_name": "Кораблев Андрей Юрьевич"
+     }
+    },
+    {
+     "author": {
+      "display_name": "Булатов Расул Баширович"
+     }
+    }
+   ],
+   "abstract_inverted_index": {
+    "Мы": [
+     0
+    ],
+    "живем": [
+     1
+    ],
+    "в": [
+     2,
+     5
+    ],
+    "удивительное": [
+     3
+    ],
+    "время": [
+     4
+    ],
+    "эпоху,": [
+     6
+    ],
+    "когда": [
+     7
+    ],
+    "радикальные": [
+     8
+    ],
+    "изменения": [
+     9
+    ],
+    "технологий": [
+     10
+    ],
+    "происходят": [
+     11
+    ],
+    "на": [
+     12
+    ],
+    "наших": [
+     13
+    ],
+    "глазах,": [
+     14
+    ],
+    "и": [
+     15,
+     37
+    ],
+    "то,": [
+     16
+    ],
+    "что": [
+     17
+    ],
+    "еще": [
+     18
+    ],
+    "вчера": [
+     19
+    ],
+    "казалось": [
+     20
+    ],
+    "фантастикой,": [
+     21
+    ],
+    "сегодня": [
+     22
+    ],
+    "уже": [
+     23
+    ],
+    "является": [
+     24
+    ],
+    "реальным": [
+     25
+    ],
+    "проектом,": [
+     26
+    ],
+    "над": [
+     27
+    ],
+    "которым": [
+     28
+    ],
+    "работают": [
+     29
+    ],
+    "инновационные": [
+     30
+    ],
+    "компании,": [
+     31
+    ],
+    "а": [
+     32
+    ],
+    "завтра": [
+     33
+    ],
+    "становится": [
+     34
+    ],
+    "естественным,": [
+     35
+    ],
+    "распространенным": [
+     36
+    ],
+    "обыденным": [
+     38
+    ],
+    "явлением,": [
+     39
+    ]
+   },
+   "primary_location": {
+    "landing_page_url": "https://cyberleninka.ru/article/n/mashinnoe-obuchenie-v-biznese",
+    "pdf_url": null,
+    "is_oa": true,
+    "source": {
+     "display_name": "CyberLeninK (CyberLeninka)"
+    }
+   },
+   "best_oa_location": {
+    "landing_page_url": "https://cyberleninka.ru/article/n/mashinnoe-obuchenie-v-biznese",
+    "pdf_url": null,
+    "is_oa": true,
+    "source": {
+     "display_name": "CyberLeninK (CyberLeninka)"
+    }
+   },
+   "locations": [
+    {
+     "landing_page_url": "https://cyberleninka.ru/article/n/mashinnoe-obuchenie-v-biznese",
+     "pdf_url": null,
+     "is_oa": true,
+     "source": {
+      "display_name": "CyberLeninK (CyberLeninka)"
+     }
+    },
+    {
+     "landing_page_url": "https://cyberleninka.ru/article/n/mashinnoe-obuchenie-v-biznese",
+     "pdf_url": null,
+     "is_oa": false,
+     "source": {
+      "display_name": "AZIMUTH OF SCIENTIFIC RESEARCH ECONOMICS AND ADMINISTRATION"
+     }
+    }
+   ]
+  }
+ ]
+}
