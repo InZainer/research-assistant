@@ -56,6 +56,31 @@ uv run research-assistant show 10 --sentences    # предложения с ID:
 
 Статья делится на разделы с типом (`introduction`, `method`, `results`, `appendix`…), разделы — на фрагменты до 220 слов, фрагменты — на предложения. У каждого предложения есть позиция в тексте фрагмента и номер страницы PDF. Колонтитулы, сноски, формулы, шапка статьи и список литературы отбрасываются. Если полного текста нет, в поиск попадает аннотация из метаданных.
 
+## Поиск
+
+```bash
+uv run research-assistant search "how does tree-based verification work" --k 5
+uv run research-assistant search "ограничения метода" --section limitations --topic "speculative decoding"
+uv run research-assistant search "draft model latency" --mode bm25     # bm25 | dense | hybrid
+```
+
+BM25 работает сразу: полнотекстовый индекс SQLite FTS5 строится вместе с разбором, слова приводятся к основам (английский и русский). Для плотного поиска нужна многоязычная модель эмбеддингов — по замерам лучшая из опробованных `bge-m3` (в LM Studio: `lms get https://huggingface.co/ggml-org/bge-m3-Q8_0-GGUF`, затем `EMBED_MODEL=text-embedding-bge-m3` в `.env`). Векторы считаются один раз и потом досчитываются для новых статей:
+
+```bash
+uv run research-assistant index
+```
+
+По умолчанию поиск гибридный: списки BM25 и плотного поиска сливаются по местам (Reciprocal Rank Fusion). Без эмбеддингов он сам переключается на BM25.
+
+## Оценка поиска
+
+```bash
+uv run research-assistant eval-retrieval                 # Recall@5/10, MRR@10, nDCG@10 по режимам
+uv run research-assistant eval-retrieval --modes bm25
+```
+
+Результаты экспериментов — в [docs/experiments.md](docs/experiments.md). Вопросы лежат в `eval/retrieval_gold.jsonl`: ответ задан названием статьи и дословной цитатой, поэтому набор не ломается при переразборе. Метрики считаются отдельно для групп «язык вопроса→язык статьи» (en→en, ru→en, ru→ru), подробности по каждому вопросу сохраняются в `runs/`.
+
 ## Статус
 
-Готовы этапы 1–3 из 10: каркас, проверка провайдера, сбор статей, разбор полных текстов. Ход работы — в разделе «Журнал этапов» файла [PLAN.md](PLAN.md).
+Готовы этапы 1–4 из 10: каркас, сбор статей, разбор полных текстов, поиск. Ход работы — в разделе «Журнал этапов» файла [PLAN.md](PLAN.md).

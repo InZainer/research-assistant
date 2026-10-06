@@ -4,7 +4,8 @@ import pytest
 
 from research_assistant.config import load_settings
 
-ENV_VARS = ["OPENAI_BASE_URL", "OPENAI_API_KEY", "MODEL", "EMBED_MODEL", "DATA_DIR", "RUNS_DIR", "MAX_STEPS", "CONTACT_EMAIL", "OPENALEX_API_KEY"]
+ENV_VARS = ["OPENAI_BASE_URL", "OPENAI_API_KEY", "MODEL", "EMBED_MODEL", "DATA_DIR", "RUNS_DIR", "MAX_STEPS", "CONTACT_EMAIL", "OPENALEX_API_KEY",
+            "EMBED_BASE_URL", "EMBED_API_KEY"]
 
 
 @pytest.fixture(autouse=True)
@@ -43,3 +44,12 @@ def test_user_agent_mentions_contact(monkeypatch):
     assert "student project" in load_settings(env_file=None).user_agent
     monkeypatch.setenv("CONTACT_EMAIL", "me@example.org")
     assert "mailto:me@example.org" in load_settings(env_file=None).user_agent
+
+
+def test_embedding_service_defaults_to_chat_service(monkeypatch):
+    monkeypatch.setenv("OPENAI_BASE_URL", "http://localhost:1234/v1")
+    settings = load_settings(env_file=None)
+    assert settings.embed_base_url == "http://localhost:1234/v1"
+    assert settings.embed_model == ""
+    monkeypatch.setenv("EMBED_BASE_URL", "https://embeddings.example/v1")
+    assert load_settings(env_file=None).embed_base_url == "https://embeddings.example/v1"

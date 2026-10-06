@@ -18,6 +18,8 @@ class Settings:
     max_steps: int
     contact_email: str | None = None
     openalex_api_key: str | None = None
+    embed_base_url: str | None = None
+    embed_api_key: str | None = None
 
     @property
     def db_path(self) -> Path:
@@ -30,6 +32,10 @@ class Settings:
     @property
     def fulltext_dir(self) -> Path:
         return self.data_dir / "fulltext"
+
+    @property
+    def vectors_dir(self) -> Path:
+        return self.data_dir / "vectors"
 
     @property
     def user_agent(self) -> str:
@@ -63,10 +69,13 @@ def load_settings(env_file: str | Path | None = ".env") -> Settings:
         base_url=os.getenv("OPENAI_BASE_URL") or None,
         api_key=os.getenv("OPENAI_API_KEY") or None,
         model=os.getenv("MODEL") or None,
-        embed_model=os.getenv("EMBED_MODEL", "BAAI/bge-m3"),
+        embed_model=os.getenv("EMBED_MODEL", ""),
         data_dir=Path(os.getenv("DATA_DIR", "data")),
         runs_dir=Path(os.getenv("RUNS_DIR", "runs")),
         max_steps=max_steps,
         contact_email=os.getenv("CONTACT_EMAIL") or None,
         openalex_api_key=os.getenv("OPENALEX_API_KEY") or None,
+        # Эмбеддинги можно брать у другого сервиса, чем чат-модель; по умолчанию — у того же.
+        embed_base_url=os.getenv("EMBED_BASE_URL") or os.getenv("OPENAI_BASE_URL") or None,
+        embed_api_key=os.getenv("EMBED_API_KEY") or os.getenv("OPENAI_API_KEY") or None,
     )

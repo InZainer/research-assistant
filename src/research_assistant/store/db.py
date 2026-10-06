@@ -2,9 +2,11 @@
 
 import json
 import sqlite3
+from dataclasses import dataclass
 from pathlib import Path
 
 from research_assistant.ingest.models import PaperRecord
+from research_assistant.nlp.text import analyze
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS topics (
@@ -87,7 +89,58 @@ CREATE TABLE IF NOT EXISTS sentences (
     text TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS sentences_passage ON sentences(passage_id, order_idx);
+
+-- Полнотекстовый индекс по основам слов (nlp/text.py), rowid = passages.id.
+-- Колонки: текст фрагмента, заголовок раздела, заголовок статьи — с разными весами в BM25.
+CREATE VIRTUAL TABLE IF NOT EXISTS passages_fts USING fts5(body, section, title, tokenize = 'unicode61');
 """
+
+# Веса колонок passages_fts в BM25: текст важнее заголовков.
+BM25_WEIGHTS = (1.0, 0.5, 0.3)
+
+
+@dataclass
+class PassageFilter:
+    """Ограничения поиска. Пустые поля не ограничивают."""
+
+    topic: str | None = None
+    year_from: int | None = None
+    year_to: int | None = None
+    section_kinds: list[str] | None = None
+    language: str | None = None
+    paper_ids: list[int] | None = None
+    include_captions: bool = True
+
+    def sql(self) -> tuple[str, list]:
+        """Условие WHERE над алиасами p (passages), s (sections), pa (papers)."""
+        conditions, params = [], []
+        if self.topic:
+            conditions.append(
+                "p.paper_id IN (SELECT pt.paper_id FROM paper_topics pt JOIN topics t ON t.id = pt.topic_id"
+                " WHERE t.name = ?)"
+            )
+            params.append(" ".join(self.topic.split()))
+        if self.year_from:
+            conditions.append("pa.year >= ?")
+            params.append(self.year_from)
+        if self.year_to:
+            conditions.append("pa.year <= ?")
+            params.append(self.year_to)
+        if self.section_kinds:
+            conditions.append(f"s.kind IN ({','.join('?' * len(self.section_kinds))})")
+            params.extend(self.section_kinds)
+        if self.language:
+            conditions.append("pa.language = ?")
+            params.append(self.language)
+        if self.paper_ids:
+            conditions.append(f"p.paper_id IN ({','.join('?' * len(self.paper_ids))})")
+            params.extend(self.paper_ids)
+        if not self.include_captions:
+            conditions.append("p.kind = 'text'")
+        return (" AND ".join(conditions) or "1"), params
+
+
+PASSAGE_JOIN = "passages p JOIN sections s ON s.id = p.section_id JOIN papers pa ON pa.id = p.paper_id"
 
 KEY_COLUMNS = {"doi": "doi", "arxiv": "arxiv_id", "openalex": "openalex_id", "title": "title_key"}
 UNIQUE_COLUMNS = ("doi", "arxiv_id", "openalex_id")
@@ -102,6 +155,25 @@ class Library:
         self.conn.row_factory = sqlite3.Row
         self.conn.execute("PRAGMA foreign_keys = ON")
         self.conn.executescript(SCHEMA)
+        self._ensure_fts()
+
+    def _ensure_fts(self) -> None:
+        """Достраивает полнотекстовый индекс для фрагментов, разобранных до его появления."""
+        passages = self.conn.execute("SELECT COUNT(*) FROM passages").fetchone()[0]
+        indexed = self.conn.execute("SELECT COUNT(*) FROM passages_fts").fetchone()[0]
+        if passages != indexed:
+            self.rebuild_fts()
+
+    def rebuild_fts(self) -> None:
+        with self.conn:
+            self.conn.execute("DELETE FROM passages_fts")
+            rows = self.conn.execute(
+                f"SELECT p.id, p.text, s.title AS section, pa.title FROM {PASSAGE_JOIN}"
+            ).fetchall()
+            self.conn.executemany(
+                "INSERT INTO passages_fts(rowid, body, section, title) VALUES (?, ?, ?, ?)",
+                [(r["id"], *_fts_columns(r["text"], r["section"], r["title"])) for r in rows],
+            )
 
     def close(self) -> None:
         self.conn.close()
@@ -247,7 +319,11 @@ class Library:
     ) -> dict[str, int]:
         """Заменяет разбор статьи целиком. sections — список SectionOut из parse.passages."""
         counts = {"sections": 0, "passages": 0, "sentences": 0}
+        paper_title = self.conn.execute("SELECT title FROM papers WHERE id = ?", (paper_id,)).fetchone()["title"]
         with self.conn:
+            self.conn.execute(
+                "DELETE FROM passages_fts WHERE rowid IN (SELECT id FROM passages WHERE paper_id = ?)", (paper_id,)
+            )
             self.conn.execute("DELETE FROM sections WHERE paper_id = ?", (paper_id,))
             passage_idx = 0
             for section_idx, section in enumerate(sections):
@@ -263,6 +339,10 @@ class Library:
                         (paper_id, section_id, passage_idx, passage.page, passage.kind, source, passage.text),
                     ).lastrowid
                     passage_idx += 1
+                    self.conn.execute(
+                        "INSERT INTO passages_fts(rowid, body, section, title) VALUES (?, ?, ?, ?)",
+                        (passage_id, *_fts_columns(passage.text, section.title, paper_title)),
+                    )
                     self.conn.executemany(
                         """INSERT INTO sentences(passage_id, order_idx, char_start, char_end, page, text)
                            VALUES (?, ?, ?, ?, ?, ?)""",
@@ -297,6 +377,52 @@ class Library:
             sections.append({**dict(section), "passages": passages})
         return sections
 
+    def search_fts(self, query: str, k: int, where: PassageFilter | None = None) -> list[tuple[int, float]]:
+        """BM25 по основам слов. Слова запроса объединяются через OR: BM25 сам поднимет фрагменты,
+        где совпало больше редких слов. Возвращает (id фрагмента, оценка), лучшие первыми."""
+        terms = list(dict.fromkeys(analyze(query)))
+        if not terms:
+            return []
+        match = " OR ".join(f'"{t}"' for t in terms)
+        condition, params = (where or PassageFilter()).sql()
+        weights = ", ".join(str(w) for w in BM25_WEIGHTS)
+        rows = self.conn.execute(
+            f"""SELECT p.id, bm25(passages_fts, {weights}) AS rank
+                FROM passages_fts JOIN passages p ON p.id = passages_fts.rowid
+                JOIN sections s ON s.id = p.section_id JOIN papers pa ON pa.id = p.paper_id
+                WHERE passages_fts MATCH ? AND {condition}
+                ORDER BY rank LIMIT ?""",
+            [match, *params, k],
+        ).fetchall()
+        return [(row["id"], -row["rank"]) for row in rows]
+
+    def passage_ids(self, where: PassageFilter | None = None) -> set[int]:
+        condition, params = (where or PassageFilter()).sql()
+        return {r[0] for r in self.conn.execute(f"SELECT p.id FROM {PASSAGE_JOIN} WHERE {condition}", params)}
+
+    def passages_for_embedding(self, ids: list[int] | None = None) -> list[sqlite3.Row]:
+        """Текст для эмбеддинга: заголовок статьи и раздела добавляют фрагменту контекст."""
+        sql = f"SELECT p.id, p.text, s.title AS section, pa.title FROM {PASSAGE_JOIN}"
+        if ids is None:
+            return self.conn.execute(sql + " ORDER BY p.id").fetchall()
+        rows = []
+        for start in range(0, len(ids), 500):
+            chunk = ids[start:start + 500]
+            rows += self.conn.execute(sql + f" WHERE p.id IN ({','.join('?' * len(chunk))})", chunk).fetchall()
+        return sorted(rows, key=lambda r: r["id"])
+
+    def passages_by_ids(self, ids: list[int]) -> dict[int, dict]:
+        """Фрагменты с данными статьи и раздела — для выдачи результатов поиска."""
+        if not ids:
+            return {}
+        rows = self.conn.execute(
+            f"""SELECT p.id, p.text, p.page, p.kind, p.source, p.paper_id, s.title AS section, s.kind AS section_kind,
+                       pa.title, pa.year, pa.language, pa.authors
+                FROM {PASSAGE_JOIN} WHERE p.id IN ({','.join('?' * len(ids))})""",
+            ids,
+        ).fetchall()
+        return {r["id"]: dict(r) for r in rows}
+
     def get_parse(self, paper_id: int) -> sqlite3.Row | None:
         return self.conn.execute("SELECT * FROM parses WHERE paper_id = ?", (paper_id,)).fetchone()
 
@@ -308,3 +434,7 @@ class Library:
                JOIN topics t ON t.id = pt.topic_id WHERE t.name = ? ORDER BY p.id LIMIT ?""",
             (" ".join(topic.split()), limit),
         ).fetchall()
+
+
+def _fts_columns(text: str, section: str | None, title: str | None) -> tuple[str, str, str]:
+    return " ".join(analyze(text)), " ".join(analyze(section or "")), " ".join(analyze(title or ""))

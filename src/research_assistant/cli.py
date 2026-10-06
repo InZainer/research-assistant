@@ -214,6 +214,96 @@ def cmd_library(settings: Settings, args) -> int:
     return 0
 
 
+def make_searcher(settings: Settings, library):
+    from research_assistant.retrieval.search import Searcher
+    from research_assistant.store.vectors import VectorIndex, index_path
+
+    if not settings.embed_model:
+        return Searcher(library)
+    from research_assistant.nlp.embed import OpenAIEmbedder
+
+    embedder = OpenAIEmbedder(settings.embed_model, settings.embed_base_url, settings.embed_api_key)
+    return Searcher(library, embedder, VectorIndex.load(index_path(settings.vectors_dir, settings.embed_model)))
+
+
+def cmd_index(settings: Settings, args) -> int:
+    from research_assistant.nlp.embed import OpenAIEmbedder
+    from research_assistant.retrieval.search import build_index
+    from research_assistant.store.db import Library
+    from research_assistant.store.vectors import VectorIndex, index_path
+
+    if not settings.embed_model:
+        print("Не задана EMBED_MODEL: плотный поиск выключен, работает только BM25. См. .env.example.")
+        return 2
+    embedder = OpenAIEmbedder(settings.embed_model, settings.embed_base_url, settings.embed_api_key)
+    index = VectorIndex.load(index_path(settings.vectors_dir, settings.embed_model))
+    with Library(settings.db_path) as library:
+        stats = build_index(library, embedder, index, log=print)
+    print(f"Готово: в индексе {len(index)} векторов (добавлено {stats['added']}, удалено {stats['removed']}), "
+          f"модель {settings.embed_model}")
+    return 0
+
+
+def search_filter(args):
+    from research_assistant.store.db import PassageFilter
+
+    return PassageFilter(
+        topic=args.topic, year_from=args.year_from, year_to=args.year_to,
+        section_kinds=args.section, language=args.language,
+    )
+
+
+def cmd_search(settings: Settings, args) -> int:
+    from research_assistant.store.db import Library
+
+    with Library(settings.db_path) as library:
+        searcher = make_searcher(settings, library)
+        mode = args.mode
+        if mode != "bm25" and not searcher.dense_ready:
+            print("Эмбеддингов нет (EMBED_MODEL пуст или не выполнен index) — ищу только BM25.")
+            mode = "bm25"
+        hits = searcher.search(args.query, k=args.k, mode=mode, where=search_filter(args))
+    if not hits:
+        print("Ничего не найдено.")
+    for place, hit in enumerate(hits, 1):
+        p = hit.passage
+        where = f"с. {p['page']}" if p.get("page") else p.get("source", "")
+        ranks = ", ".join(f"{name} #{rank}" for name, rank in hit.ranks.items())
+        print()
+        print(f"{place}. [{hit.score:.3f}; {ranks}] #{p['paper_id']} {p['title'][:80]} ({p['year']})")
+        print(f"   {p['section'] or '(без заголовка)'} [{p['section_kind']}], {where}, ¶{hit.passage_id}")
+        text = p["text"]
+        print("   " + (text if len(text) <= args.max_chars else text[: args.max_chars] + " …"))
+    return 0
+
+
+def cmd_eval_retrieval(settings: Settings, args) -> int:
+    import json
+    from datetime import datetime
+
+    from research_assistant.evaluation.retrieval import evaluate, format_report, load_questions
+    from research_assistant.store.db import Library
+
+    questions = load_questions(args.file)
+    modes = [m.strip() for m in args.modes.split(",") if m.strip()]
+    with Library(settings.db_path) as library:
+        searcher = make_searcher(settings, library)
+        if not searcher.dense_ready:
+            dropped = [m for m in modes if m != "bm25"]
+            modes = [m for m in modes if m == "bm25"]
+            if dropped:
+                print(f"Эмбеддингов нет — пропускаю режимы: {', '.join(dropped)}")
+        report = evaluate(searcher, questions, modes, k=args.k)
+    report["embed_model"] = settings.embed_model or None
+    report["file"] = str(args.file)
+    print(format_report(report))
+    settings.runs_dir.mkdir(parents=True, exist_ok=True)
+    out = settings.runs_dir / f"retrieval-{datetime.now():%Y%m%d-%H%M%S}.json"
+    out.write_text(json.dumps(report, ensure_ascii=False, indent=1), encoding="utf-8")
+    print(f"Подробности по вопросам: {out}")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="research-assistant", description="Ассистент исследователя")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -246,6 +336,24 @@ def main(argv: list[str] | None = None) -> int:
     library.add_argument("--topic", help="показать статьи темы")
     library.add_argument("--limit", type=int, default=50)
 
+    sub.add_parser("index", help="посчитать эмбеддинги фрагментов для плотного поиска")
+
+    search = sub.add_parser("search", help="найти фрагменты по запросу")
+    search.add_argument("query")
+    search.add_argument("--k", type=int, default=5, help="сколько фрагментов показать")
+    search.add_argument("--mode", choices=("hybrid", "bm25", "dense"), default="hybrid")
+    search.add_argument("--topic")
+    search.add_argument("--year-from", type=int)
+    search.add_argument("--year-to", type=int)
+    search.add_argument("--section", action="append", help="тип раздела: method, results, limitations…")
+    search.add_argument("--language", help="язык статьи: en, ru")
+    search.add_argument("--max-chars", type=int, default=300)
+
+    evaluation = sub.add_parser("eval-retrieval", help="оценить поиск на золотом наборе вопросов")
+    evaluation.add_argument("--file", default="eval/retrieval_gold.jsonl")
+    evaluation.add_argument("--modes", default="bm25,dense,hybrid")
+    evaluation.add_argument("--k", type=int, default=10)
+
     args = parser.parse_args(argv)
     settings = load_settings()
     if args.command == "check":
@@ -258,6 +366,12 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_parse(settings, args)
     if args.command == "show":
         return cmd_show(settings, args)
+    if args.command == "index":
+        return cmd_index(settings, args)
+    if args.command == "search":
+        return cmd_search(settings, args)
+    if args.command == "eval-retrieval":
+        return cmd_eval_retrieval(settings, args)
     return 1
 
 

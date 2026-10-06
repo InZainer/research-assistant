@@ -8,10 +8,11 @@
 - Тесты: `uv run pytest`
 - Проверка провайдера модели: `uv run research-assistant check`
 - Сбор и разбор: `uv run research-assistant ingest "<тема>"`, `parse`, `show <id>` (подробнее в README)
+- Поиск и его оценка: `search "<запрос>"`, `index` (эмбеддинги), `eval-retrieval`
 
 ## Где что лежит
 
-- `src/research_assistant/` — код пакета. Модули по слоям: `ingest/` (сбор), `parse/` (разбор текстов), `store/` (SQLite), дальше `nlp/`, `retrieval/`, `agent/`, `answer/`.
+- `src/research_assistant/` — код пакета. Модули по слоям: `ingest/` (сбор), `parse/` (разбор текстов), `store/` (SQLite, FTS5, векторы), `nlp/` (анализатор, эмбеддинги), `retrieval/` (поиск), `evaluation/` (метрики), дальше `agent/`, `answer/`.
 - `tests/` — тесты pytest, по файлу на модуль.
 - `eval/` — наборы вопросов и задач, скрипты метрик.
 - `runs/` — журналы прогонов агента в JSONL (коммитятся только те, что нужны для отчёта).
