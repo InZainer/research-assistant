@@ -95,10 +95,13 @@ def evaluate(searcher, questions: list[GoldQuestion], modes: list[str], k: int =
         "modes": {},
     }
     for mode in modes:
+        # «hybrid+translate+rerank» — базовый режим и дополнительные шаги
+        base, *flags = mode.split("+")
         rows = []
         for q in usable:
             started = time.perf_counter()
-            ranked = [hit.passage_id for hit in searcher.search(q.question, k=k, mode=mode)]
+            hits = searcher.search(q.question, k=k, mode=base, translate="translate" in flags, rerank="rerank" in flags)
+            ranked = [hit.passage_id for hit in hits]
             elapsed = time.perf_counter() - started
             relevant = resolved[q.id]
             rows.append({

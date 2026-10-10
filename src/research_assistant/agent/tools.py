@@ -135,6 +135,32 @@ def list_entities(ctx: ToolContext, type: str, topic: str | None = None, limit: 
     return "\n".join(lines)
 
 
+MAX_COMPARE = 4
+
+
+def compare_papers(ctx: ToolContext, paper_ids: list[int], aspect: str, k: int = 2) -> str:
+    """По каждой статье: её разметка (датасеты, метрики, методы) и лучшие фрагменты по аспекту сравнения."""
+    if not isinstance(paper_ids, list) or not 2 <= len(paper_ids) <= MAX_COMPARE:
+        raise ToolError(f"give 2-{MAX_COMPARE} paper ids (see library_overview or search results)")
+    if not aspect or not aspect.strip():
+        raise ToolError("aspect is empty, e.g. 'speedup and datasets'")
+    k = max(1, min(int(k), 3))
+    blocks = []
+    for paper_id in paper_ids:
+        paper = ctx.library.get_paper(int(paper_id))
+        if paper is None:
+            raise ToolError(f"paper {paper_id} does not exist")
+        entities = ctx.library.paper_entities(paper["id"])
+        lines = [f"=== paper {paper['id']}: \"{paper['title']}\" ({paper['year']})"]
+        for entity_type in ("dataset", "metric", "method"):
+            if entities.get(entity_type):
+                lines.append(f"{entity_type}s: {', '.join(entities[entity_type][:6])}")
+        hits = ctx.searcher.search(aspect, k=k, mode="hybrid", where=PassageFilter(paper_ids=[paper["id"]]))
+        lines.append(_format_passages(ctx, [h.passage for h in hits]) if hits else "(no passages on this aspect)")
+        blocks.append("\n".join(lines))
+    return f'Comparison on "{aspect}":\n\n' + "\n\n".join(blocks)
+
+
 def library_overview(ctx: ToolContext, topic: str | None = None) -> str:
     if topic is None:
         rows = ctx.library.topic_summary()
@@ -237,6 +263,26 @@ SCHEMAS = [
                     "limit": {"type": "integer", "description": "How many entities, 1-30. Default 15."},
                 },
                 "required": ["type"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "compare_papers",
+            "description": (
+                f"Compare 2-{MAX_COMPARE} papers on one aspect (e.g. 'speedup and datasets', 'limitations'): returns each "
+                "paper's annotated datasets, metrics and methods and its best passages on the aspect, with sentence ids. "
+                "Use paper ids from search results (paper N) or library_overview."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "paper_ids": {"type": "array", "items": {"type": "integer"}},
+                    "aspect": {"type": "string", "description": "What to compare, e.g. 'speedup on MT-Bench'."},
+                    "k": {"type": "integer", "description": "Passages per paper, 1-3. Default 2."},
+                },
+                "required": ["paper_ids", "aspect"],
             },
         },
     },
@@ -347,8 +393,42 @@ FUNCTIONS: dict[str, Callable] = {
     "read_passage": read_passage,
     "library_overview": library_overview,
     "list_entities": list_entities,
+    "compare_papers": compare_papers,
     "search_external": search_external,
     "add_papers": add_papers,
+}
+
+
+# Вариант для эксперимента E2: модель пишет цитату текстом сама, без ID. Ответ не проверяется,
+# дословность считается после прогона — так видно, сколько цитат модель искажает.
+FINAL_ANSWER_QUOTES = {
+    "type": "function",
+    "function": {
+        "name": FINAL_ANSWER,
+        "description": (
+            "Finish with the answer. Every claim must include a verbatim quote copied exactly, character by character, "
+            "from the passages in tool results. If the library has no supporting text, set not_found to true."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "answer": {"type": "string", "description": "Short answer in the language of the user's question."},
+                "claims": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "text": {"type": "string"},
+                            "quote": {"type": "string", "description": "Exact sentence copied from a passage."},
+                        },
+                        "required": ["text", "quote"],
+                    },
+                },
+                "not_found": {"type": "boolean"},
+            },
+            "required": ["answer", "claims"],
+        },
+    },
 }
 
 

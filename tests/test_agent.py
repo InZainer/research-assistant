@@ -157,7 +157,7 @@ def test_history_and_reasoning_effort_reach_the_model(ctx):
     assert [m["role"] for m in request["messages"]] == ["system", "user", "assistant", "user"]
     assert request["extra_body"] == {"reasoning_effort": "none"}
     assert {t["function"]["name"] for t in request["tools"]} == {
-        "search_library", "read_passage", "library_overview", "list_entities", "final_answer"}
+        "search_library", "read_passage", "library_overview", "list_entities", "compare_papers", "final_answer"}
 
 
 # --- инструменты ---
@@ -236,3 +236,84 @@ def test_section_filter_keeps_unstructured_papers(ctx):
     section.passages = paragraph_passages(Paragraph("We compared Naive Bayes and logistic regression classifiers.", [(0, None)]))
     ctx.library.save_structure(paper_id, [section], status="ok", parser="html", version=1)
     assert "Naive Bayes" in search_library(ctx, "naive bayes classifiers", section_kinds=["results"])
+
+
+# --- этап 7: сравнение статей, однократный RAG, цитаты текстом, оценка агента ---
+
+def test_compare_papers(ctx):
+    from research_assistant.agent.tools import compare_papers
+
+    ctx.library.save_annotation(1, {"dataset": ["MT-Bench"], "method": ["draft model"]}, [], status="ok",
+                                annotator="t", version=1)
+    text = compare_papers(ctx, [1, 2], "speedup and memory", k=1)
+    assert "=== paper 1" in text and "=== paper 2" in text and "datasets: MT-Bench" in text
+    assert "[s" in text  # предложения с ID, на них можно ссылаться
+    with pytest.raises(ToolError):
+        compare_papers(ctx, [1], "x")
+    with pytest.raises(ToolError, match="does not exist"):
+        compare_papers(ctx, [1, 999], "x")
+
+
+def test_single_shot_searches_once_and_offers_only_final_answer(ctx):
+    sid = sentence_id(ctx, "Speedup drops")
+    client = ScriptedClient([[call("final_answer", {"answer": "a", "claims": [{"text": "c", "sentence_ids": [sid]}]})]])
+    result = run_agent("draft model disagrees speedup", ctx, ChatModel("fake", client=client), single_shot=True)
+    assert result.stop_reason == "final_answer" and result.steps == 1
+    request = client.requests[0]
+    assert {t["function"]["name"] for t in request["tools"]} == {"final_answer"}
+    assert any(m["role"] == "tool" and f"[s{sid}]" in m["content"] for m in request["messages"])
+
+
+def test_quotes_mode_accepts_free_text_quotes(ctx):
+    client = ScriptedClient([[call("final_answer", {"answer": "a", "claims": [
+        {"text": "c", "quote": "Speedup drops when the draft model disagrees with the target model."}]})]])
+    result = run_agent("q", ctx, ChatModel("fake", client=client), answer_mode="quotes")
+    assert result.stop_reason == "final_answer" and result.claims == []
+    assert result.quotes == [("c", "Speedup drops when the draft model disagrees with the target model.")]
+    schema = next(t for t in client.requests[0]["tools"] if t["function"]["name"] == "final_answer")
+    assert "quote" in schema["function"]["parameters"]["properties"]["claims"]["items"]["properties"]
+
+
+def test_agent_evaluation_metrics(ctx):
+    from research_assistant.evaluation.agent import evaluate_agent, passages_with_quote, wilson
+    from research_assistant.evaluation.retrieval import GoldItem, GoldQuestion
+
+    low, high = wilson(8, 10)
+    assert 0.4 < low < 0.8 < high < 1.0 and wilson(0, 0) == (0.0, 0.0)
+    assert len(passages_with_quote(ctx.library, "Rare tokens   are the main cause.")) == 1
+    assert passages_with_quote(ctx.library, "Rare tokens are the MAIN cause.") == set()
+
+    questions = [
+        GoldQuestion("en1", "why does speedup drop", "en",
+                     [GoldItem("Speculative decoding with draft models", "Rare tokens are the main cause.")]),
+        GoldQuestion("en2", "which model needs tree verification", "en",  # поиск поднимает обе статьи
+                     [GoldItem("Tree attention for verification", "checks many candidate continuations")]),
+    ]
+    good = sentence_id(ctx, "Rare tokens")  # фрагмент статьи 1: золото для вопроса 1, мимо для вопроса 2
+
+    def turn(sid):
+        return lambda messages: [call("final_answer", {"answer": "a", "claims": [{"text": "c", "sentence_ids": [sid]}]})]
+
+    # вопрос 1 — цитата из золотого фрагмента (успех), вопрос 2 — цитата из другой статьи (неуспех)
+    client = ScriptedClient([turn(good)] * 4)
+    report = evaluate_agent(lambda: ToolContext(library=ctx.library, searcher=ctx.searcher),
+                            ChatModel("fake", client=client), questions, variant="single", runs=2)
+    summary = report["summary"]["all"]
+    assert summary["n"] == 4 and summary["pass@1"] == 0.5 and summary["pass^2"] == 0.5
+    assert summary["accepted"] == 1.0 and summary["exact_quote_rate"] == 1.0
+    assert "en→en" in report["summary"]
+
+
+def test_quote_with_copied_id_tag_counts_as_exact(ctx):
+    from research_assistant.evaluation.agent import passages_with_quote
+
+    sid = sentence_id(ctx, "Rare tokens")
+    assert len(passages_with_quote(ctx.library, f"[s{sid}] Rare tokens are the main cause.")) == 1
+
+
+def test_prefetch_keeps_tools(ctx):
+    client = ScriptedClient([[call("final_answer", {"answer": "нет", "claims": [], "not_found": True})]])
+    run_agent("draft model speedup", ctx, ChatModel("fake", client=client), prefetch=True)
+    request = client.requests[0]
+    assert "search_library" in {t["function"]["name"] for t in request["tools"]}
+    assert request["messages"][-1]["role"] == "tool"

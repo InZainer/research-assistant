@@ -187,3 +187,70 @@ def test_openai_embedder_batches_and_normalizes():
     assert client.calls[0][0] == "passage: t0"
     embedder.embed_query("q")
     assert client.calls[-1] == ["query: q"]
+
+
+# --- переранжирование и перевод запроса ---
+
+class JsonReplyClient:
+    """Подменная чат-модель: отвечает заданными текстами по очереди и запоминает запросы."""
+
+    def __init__(self, replies):
+        from types import SimpleNamespace
+
+        self._ns = SimpleNamespace
+        self.replies = list(replies)
+        self.requests = []
+        self.chat = SimpleNamespace(completions=self)
+
+    def create(self, **kwargs):
+        self.requests.append(kwargs)
+        reply = self.replies.pop(0)
+        if isinstance(reply, Exception):
+            raise reply
+        message = self._ns(content=reply, tool_calls=None)
+        return self._ns(choices=[self._ns(message=message)], usage=self._ns(prompt_tokens=10, completion_tokens=2))
+
+
+def test_llm_reranker_reorders_and_keeps_unranked():
+    from research_assistant.llm import ChatModel
+    from research_assistant.retrieval.rerank import LLMReranker
+
+    client = JsonReplyClient(['{"ranking": [3, 1, 99, 3]}', RuntimeError("model down")])
+    reranker = LLMReranker(ChatModel("fake", client=client))
+    candidates = [(10, "alpha"), (20, "beta"), (30, "gamma")]
+    assert reranker.rerank("q", candidates) == [30, 10, 20]  # 99 и повтор отброшены, 20 дописан в конец
+    assert client.requests[0]["response_format"]["type"] == "json_schema"
+    assert reranker.rerank("q", candidates) == [10, 20, 30]  # сбой модели — исходный порядок
+    assert reranker.tokens == 12
+
+
+def test_query_translator_only_for_non_english_and_cached():
+    from research_assistant.llm import ChatModel
+    from research_assistant.retrieval.rerank import QueryTranslator
+
+    client = JsonReplyClient(['"draft model verification"\nextra line'])
+    translator = QueryTranslator(ChatModel("fake", client=client))
+    assert translator.to_english("speculative decoding") is None
+    assert translator.to_english("проверка черновой модели") == "draft model verification"
+    assert translator.to_english("проверка черновой модели") == "draft model verification"
+    assert len(client.requests) == 1
+
+
+def test_search_with_translation_and_rerank(library):
+    class Translator:
+        def to_english(self, query):
+            return "tree verification candidates"
+
+    class ReverseReranker:
+        def rerank(self, query, candidates):
+            return [i for i, _ in reversed(candidates)]
+
+    searcher = Searcher(library, translator=Translator(), reranker=ReverseReranker())
+    plain = searcher.search("проверка деревом", k=3, mode="bm25")
+    translated = searcher.search("проверка деревом", k=3, mode="bm25", translate=True)
+    assert plain == [] and translated[0].passage["title"] == "Tree attention for verification"
+    assert set(translated[0].ranks) == {"bm25_en"}
+    reranked = searcher.search("model", k=10, mode="bm25", rerank=True)
+    assert "rerank" in reranked[0].ranks
+    baseline = searcher.search("model", k=10, mode="bm25")
+    assert [h.passage_id for h in reranked] == [h.passage_id for h in reversed(baseline)]

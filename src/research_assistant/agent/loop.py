@@ -13,7 +13,15 @@ from datetime import datetime
 from pathlib import Path
 
 from research_assistant.agent.prompts import NUDGE_FINAL_ANSWER, SYSTEM_PROMPT
-from research_assistant.agent.tools import FINAL_ANSWER, FUNCTIONS, ToolContext, ToolError, available_schemas
+from research_assistant.agent.tools import (
+    FINAL_ANSWER,
+    FINAL_ANSWER_QUOTES,
+    FUNCTIONS,
+    ToolContext,
+    ToolError,
+    available_schemas,
+    search_library,
+)
 from research_assistant.answer.citations import Citation, load_citations, parse_sentence_id
 from research_assistant.llm import ChatModel, Usage
 
@@ -36,6 +44,7 @@ class AgentResult:
     question: str
     answer: str
     claims: list[Claim] = field(default_factory=list)
+    quotes: list[tuple[str, str]] = field(default_factory=list)  # режим E2: (утверждение, цитата текстом от модели)
     not_found: bool = False
     stop_reason: str = "final_answer"  # final_answer | max_steps | no_final_answer
     steps: int = 0
@@ -117,6 +126,20 @@ def _budget_note(steps_left: int, research_left: int) -> str:
     return ""
 
 
+def check_final_answer_quotes(args: dict) -> tuple[list[tuple[str, str]], str | None]:
+    """Режим E2: цитаты пишет модель. Проверяется только форма ответа, дословность — после прогона."""
+    if not isinstance(args.get("answer"), str) or not args["answer"].strip():
+        return [], "final_answer.answer must be a non-empty string"
+    if args.get("not_found"):
+        return [], None
+    quotes = [(str(c.get("text", "")).strip(), str(c.get("quote", "")).strip())
+              for c in args.get("claims") or [] if isinstance(c, dict)]
+    quotes = [(text, quote) for text, quote in quotes if text and quote]
+    if not quotes:
+        return [], "final_answer needs claims with a text and a quote, or not_found=true"
+    return quotes, None
+
+
 def run_agent(
     question: str,
     ctx: ToolContext,
@@ -124,21 +147,42 @@ def run_agent(
     max_steps: int = 12,
     history: list[dict] | None = None,
     log_path: Path | None = None,
+    answer_mode: str = "ids",
+    single_shot: bool = False,
+    prefetch: bool = False,
 ) -> AgentResult:
+    """answer_mode="quotes" — цитаты текстом от модели (эксперимент E2);
+    single_shot=True — один поиск по вопросу и сразу ответ, без итераций (базовая линия для E3);
+    prefetch=True — тот же поиск по вопросу заранее, но инструменты остаются: агент может ответить сразу
+    или искать дальше."""
     started = time.perf_counter()
     log = RunLog(log_path)
     result = AgentResult(question=question, answer="", log_path=str(log_path) if log_path else None)
     tools = available_schemas(ctx)
+    if answer_mode == "quotes":
+        tools = [t for t in tools if t["function"]["name"] != FINAL_ANSWER] + [FINAL_ANSWER_QUOTES]
     messages = [{"role": "system", "content": SYSTEM_PROMPT}, *(history or []), {"role": "user", "content": question}]
-    log.write("start", question=question, model=model.model, tools=[t["function"]["name"] for t in tools])
+    log.write("start", question=question, model=model.model, tools=[t["function"]["name"] for t in tools],
+              answer_mode=answer_mode, single_shot=single_shot, prefetch=prefetch)
     nudges = 0
     research_calls = 0
     final_only = [t for t in tools if t["function"]["name"] == FINAL_ANSWER]
+    if single_shot or prefetch:
+        # Поиск по самому вопросу делает код: при single_shot модели остаётся только ответить.
+        observation = search_library(ctx, question, k=6)
+        call_id = "single_shot_search"
+        messages.append({"role": "assistant", "content": "", "tool_calls": [{
+            "id": call_id, "type": "function",
+            "function": {"name": "search_library", "arguments": json.dumps({"query": question, "k": 6}, ensure_ascii=False)},
+        }]})
+        messages.append({"role": "tool", "tool_call_id": call_id, "content": _truncate(observation)})
+        log.write("tool", step=0, name="search_library", arguments=question, error=None, seconds=0,
+                  observation=_truncate(observation))
 
     for step in range(1, max_steps + 1):
         result.steps = step
         # На последнем шаге и после исчерпания бюджета исследования модель может только ответить.
-        must_answer = step == max_steps or research_calls >= MAX_RESEARCH_CALLS
+        must_answer = single_shot or step == max_steps or research_calls >= MAX_RESEARCH_CALLS
         response = model.complete(messages, final_only if must_answer else tools)
         result.usage.add(response.usage)
         message = response.choices[0].message
@@ -171,7 +215,15 @@ def run_agent(
                 args = json.loads(call.function.arguments or "{}")
                 if not isinstance(args, dict):
                     raise ToolError("arguments must be a JSON object")
-                if name == FINAL_ANSWER:
+                if name == FINAL_ANSWER and answer_mode == "quotes":
+                    quotes, error = check_final_answer_quotes(args)
+                    if error is None:
+                        result.answer, result.quotes = args["answer"].strip(), quotes
+                        result.not_found = bool(args.get("not_found"))
+                        observation, finished = "Answer accepted.", True
+                    else:
+                        observation = error
+                elif name == FINAL_ANSWER:
                     claims, error = check_final_answer(ctx, args)
                     if error is None:
                         result.answer, result.claims = args["answer"].strip(), claims

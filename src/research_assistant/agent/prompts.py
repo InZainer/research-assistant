@@ -10,6 +10,7 @@ How to work:
 by English papers, also search with an English translation of the query.
 3. Only if a hit is cut short, call read_passage with its passage id (like p123). Sentence ids look like s123.
    For "which datasets / methods / metrics" questions, call list_entities first, then search_library with entity=<name>.
+   To compare specific papers, call compare_papers with their paper ids and the aspect.
 4. Finish by calling final_answer. Every claim must cite the ids of sentences (like s123) that you saw in tool \
 results and that directly support the claim. Never invent ids. Do not answer from memory.
 5. If the library does not contain the answer after 2-3 searches, call final_answer with not_found=true.

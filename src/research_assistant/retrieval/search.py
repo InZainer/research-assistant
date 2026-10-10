@@ -13,6 +13,7 @@ from research_assistant.store.vectors import VectorIndex
 RRF_K = 60
 CANDIDATES = 50  # сколько кандидатов берём из каждого списка перед слиянием
 MODES = ("bm25", "dense", "hybrid")
+RERANK_POOL = 20  # сколько первых кандидатов переупорядочивает реранкер
 EMBED_BATCH = 64
 
 
@@ -42,10 +43,13 @@ def embedding_text(row) -> str:
 
 
 class Searcher:
-    def __init__(self, library: Library, embedder=None, index: VectorIndex | None = None):
+    def __init__(self, library: Library, embedder=None, index: VectorIndex | None = None,
+                 reranker=None, translator=None):
         self.library = library
         self.embedder = embedder
         self.index = index
+        self.reranker = reranker  # LLMReranker или любой объект с rerank(query, [(id, текст)]) -> [id]
+        self.translator = translator  # QueryTranslator: перевод неанглийского запроса для BM25
 
     @property
     def dense_ready(self) -> bool:
@@ -61,22 +65,39 @@ class Searcher:
         return self.index.search(self.embedder.embed_query(query), k, allowed)
 
     def search(
-        self, query: str, k: int = 10, mode: str = "hybrid", where: PassageFilter | None = None
+        self, query: str, k: int = 10, mode: str = "hybrid", where: PassageFilter | None = None,
+        translate: bool = False, rerank: bool = False,
     ) -> list[Hit]:
+        """translate — добавить BM25 по английскому переводу запроса; rerank — переупорядочить
+        первые RERANK_POOL кандидатов реранкером. Оба шага требуют соответствующих объектов в Searcher."""
         if mode not in MODES:
             raise ValueError(f"неизвестный режим {mode}; доступны {', '.join(MODES)}")
         if mode == "hybrid" and not self.dense_ready:
             mode = "bm25"  # без эмбеддингов гибрид вырождается в BM25
-        if mode == "hybrid":
-            rankings = {
-                "bm25": [i for i, _ in self.bm25(query, CANDIDATES, where)],
-                "dense": [i for i, _ in self.dense(query, CANDIDATES, where)],
-            }
-            fused = rrf(rankings)[:k]
-            hits = [Hit(i, score, ranks) for i, score, ranks in fused]
+        depth = max(k, RERANK_POOL) if rerank and self.reranker else k
+        rankings: dict[str, list[int]] = {}
+        if mode in ("bm25", "hybrid"):
+            rankings["bm25"] = [i for i, _ in self.bm25(query, CANDIDATES if mode == "hybrid" else depth, where)]
+        if mode in ("dense", "hybrid"):
+            rankings["dense"] = [i for i, _ in self.dense(query, CANDIDATES if mode == "hybrid" else depth, where)]
+        if translate and self.translator is not None and mode != "dense":
+            english = self.translator.to_english(query)
+            if english:
+                rankings["bm25_en"] = [i for i, _ in self.bm25(english, CANDIDATES, where)]
+        if len(rankings) == 1:
+            name, ids = next(iter(rankings.items()))
+            ranked = [(i, 1.0 / place, {name: place}) for place, i in enumerate(ids, 1)]
         else:
-            ranked = self.bm25(query, k, where) if mode == "bm25" else self.dense(query, k, where)
-            hits = [Hit(i, score, {mode: place}) for place, (i, score) in enumerate(ranked, 1)]
+            ranked = rrf(rankings)
+        ranked = ranked[:depth]
+
+        if rerank and self.reranker is not None and len(ranked) > 1:
+            texts = self.library.passages_by_ids([i for i, _, _ in ranked])
+            order = self.reranker.rerank(query, [(i, texts[i]["text"]) for i, _, _ in ranked if i in texts])
+            info = {i: (score, ranks) for i, score, ranks in ranked}
+            ranked = [(i, 1.0 / place, {**info[i][1], "rerank": place}) for place, i in enumerate(order, 1)]
+
+        hits = [Hit(i, score, ranks) for i, score, ranks in ranked[:k]]
         passages = self.library.passages_by_ids([h.passage_id for h in hits])
         for hit in hits:
             hit.passage = passages.get(hit.passage_id, {})

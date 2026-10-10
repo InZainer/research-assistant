@@ -1,6 +1,7 @@
 """Командная строка проекта: `uv run research-assistant <команда>`."""
 
 import argparse
+from pathlib import Path
 import json
 import sys
 
@@ -230,10 +231,10 @@ def cmd_library(settings: Settings, args) -> int:
     return 0
 
 
-def make_searcher(settings: Settings, library):
+def make_searcher(settings: Settings, library, with_llm: bool = False):
     from research_assistant.agent.session import make_searcher as build
 
-    return build(settings, library)
+    return build(settings, library, with_llm=with_llm)
 
 
 def cmd_index(settings: Settings, args) -> int:
@@ -267,12 +268,13 @@ def cmd_search(settings: Settings, args) -> int:
     from research_assistant.store.db import Library
 
     with Library(settings.db_path) as library:
-        searcher = make_searcher(settings, library)
+        searcher = make_searcher(settings, library, with_llm=args.translate or args.rerank)
         mode = args.mode
         if mode != "bm25" and not searcher.dense_ready:
             print("Эмбеддингов нет (EMBED_MODEL пуст или не выполнен index) — ищу только BM25.")
             mode = "bm25"
-        hits = searcher.search(args.query, k=args.k, mode=mode, where=search_filter(args))
+        hits = searcher.search(args.query, k=args.k, mode=mode, where=search_filter(args),
+                               translate=args.translate, rerank=args.rerank)
     if not hits:
         print("Ничего не найдено.")
     for place, hit in enumerate(hits, 1):
@@ -297,14 +299,17 @@ def cmd_eval_retrieval(settings: Settings, args) -> int:
     questions = load_questions(args.file)
     modes = [m.strip() for m in args.modes.split(",") if m.strip()]
     with Library(settings.db_path) as library:
-        searcher = make_searcher(settings, library)
+        searcher = make_searcher(settings, library, with_llm=any("+" in m for m in modes))
         if not searcher.dense_ready:
-            dropped = [m for m in modes if m != "bm25"]
-            modes = [m for m in modes if m == "bm25"]
+            dropped = [m for m in modes if not m.startswith("bm25")]
+            modes = [m for m in modes if m.startswith("bm25")]
             if dropped:
                 print(f"Эмбеддингов нет — пропускаю режимы: {', '.join(dropped)}")
         report = evaluate(searcher, questions, modes, k=args.k)
     report["embed_model"] = settings.embed_model or None
+    if searcher.reranker is not None:
+        report["llm_model"] = settings.model
+        report["llm_tokens"] = searcher.reranker.tokens + searcher.translator.tokens
     report["file"] = str(args.file)
     print(format_report(report))
     settings.runs_dir.mkdir(parents=True, exist_ok=True)
@@ -359,7 +364,9 @@ def cmd_ask(settings: Settings, args) -> int:
         ctx, model, http = made
         log_path = settings.runs_dir / f"ask-{datetime.now():%Y%m%d-%H%M%S}.jsonl"
         try:
-            result = run_agent(args.question, ctx, model, max_steps=settings.max_steps, log_path=log_path)
+            # prefetch: поиск по самому вопросу заранее — лучший вариант в эксперименте E3 (docs/experiments.md)
+            result = run_agent(args.question, ctx, model, max_steps=settings.max_steps, log_path=log_path,
+                               prefetch=True)
         finally:
             http.close()
     print_agent_result(result)
@@ -390,7 +397,7 @@ def cmd_chat(settings: Settings, args) -> int:
                     break
                 ctx.seen_sentences.clear()  # цитировать можно только то, что найдено для этого вопроса
                 result = run_agent(question, ctx, model, max_steps=settings.max_steps, history=history,
-                                   log_path=log_path)
+                                   log_path=log_path, prefetch=True)
                 print_agent_result(result)
                 # В историю идут только вопрос и итоговый ответ: выдача инструментов прошлых шагов не раздувает контекст.
                 history += [{"role": "user", "content": question}, {"role": "assistant", "content": result.answer}]
@@ -466,6 +473,49 @@ def cmd_entities(settings: Settings, args) -> int:
     return 0
 
 
+def cmd_eval_agent(settings: Settings, args) -> int:
+    import json
+    from datetime import datetime
+
+    from research_assistant.agent.session import make_agent
+    from research_assistant.evaluation.agent import evaluate_agent, format_agent_report
+    from research_assistant.evaluation.retrieval import load_questions
+    from research_assistant.store.db import Library
+
+    questions = load_questions(args.file)
+    if args.rescore:
+        from research_assistant.evaluation.agent import rescore_log
+
+        with Library(settings.db_path) as library:
+            report = rescore_log(library, questions, Path(args.rescore), args.variant)
+        print(format_agent_report(report))
+        return 0
+    if settings.missing_llm_vars():
+        print("Не задана модель: заполните MODEL и OPENAI_API_KEY в .env.")
+        return 2
+    if args.only:
+        questions = [q for q in questions if any(q.id.startswith(prefix) for prefix in args.only.split(","))]
+    if args.limit:
+        questions = questions[: args.limit]
+    with Library(settings.db_path) as library:
+        _, model, http = make_agent(settings, library, external=False)
+        http.close()
+
+        def fresh_context():
+            ctx, _, client = make_agent(settings, library, external=False)
+            client.close()
+            return ctx
+
+        report = evaluate_agent(fresh_context, model, questions, variant=args.variant, runs=args.runs,
+                                max_steps=settings.max_steps, log_dir=settings.runs_dir, log=print)
+    print(format_agent_report(report))
+    settings.runs_dir.mkdir(parents=True, exist_ok=True)
+    out = settings.runs_dir / f"agent-{args.variant}-{datetime.now():%Y%m%d-%H%M%S}.json"
+    out.write_text(json.dumps(report, ensure_ascii=False, indent=1), encoding="utf-8")
+    print(f"Подробности: {out}")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="research-assistant", description="Ассистент исследователя")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -511,6 +561,8 @@ def main(argv: list[str] | None = None) -> int:
     search.add_argument("--section", action="append", help="тип раздела: method, results, limitations…")
     search.add_argument("--language", help="язык статьи: en, ru")
     search.add_argument("--entity", help="только фрагменты, где упоминается сущность, например MT-Bench")
+    search.add_argument("--translate", action="store_true", help="добавить BM25 по английскому переводу запроса")
+    search.add_argument("--rerank", action="store_true", help="переупорядочить кандидатов чат-моделью")
     search.add_argument("--max-chars", type=int, default=300)
 
     evaluation = sub.add_parser("eval-retrieval", help="оценить поиск на золотом наборе вопросов")
@@ -541,6 +593,15 @@ def main(argv: list[str] | None = None) -> int:
     entities.add_argument("--topic")
     entities.add_argument("--limit", type=int, default=25)
 
+    eval_agent = sub.add_parser("eval-agent", help="оценить агента на золотых вопросах (pass@1, pass^k)")
+    eval_agent.add_argument("--variant", choices=("agent", "single", "quotes", "prefetch"), default="agent",
+                            help="agent — итеративный; single — один поиск и ответ (E3); quotes — цитаты текстом (E2)")
+    eval_agent.add_argument("--runs", type=int, default=1, help="прогонов каждого вопроса (для pass^k)")
+    eval_agent.add_argument("--file", default="eval/retrieval_gold.jsonl")
+    eval_agent.add_argument("--only", help="префиксы id вопросов через запятую, например en,xl")
+    eval_agent.add_argument("--limit", type=int, help="первые N вопросов")
+    eval_agent.add_argument("--rescore", help="пересчитать метрики по журналу runs/eval-agent-*.jsonl без модели")
+
     args = parser.parse_args(argv)
     settings = load_settings()
     if args.command == "check":
@@ -565,6 +626,8 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_entities(settings, args)
     if args.command == "eval-entities":
         return cmd_eval_entities(settings, args)
+    if args.command == "eval-agent":
+        return cmd_eval_agent(settings, args)
     if args.command == "ask":
         return cmd_ask(settings, args)
     if args.command == "chat":

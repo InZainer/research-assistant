@@ -18,13 +18,20 @@ from research_assistant.store.db import Library
 from research_assistant.store.vectors import VectorIndex, index_path
 
 
-def make_searcher(settings: Settings, library: Library) -> Searcher:
-    if not settings.embed_model:
-        return Searcher(library)
-    from research_assistant.nlp.embed import OpenAIEmbedder
+def make_searcher(settings: Settings, library: Library, with_llm: bool = False) -> Searcher:
+    """with_llm — подключить перевод запроса и реранкер на чат-модели из .env (если она задана)."""
+    searcher = Searcher(library)
+    if settings.embed_model:
+        from research_assistant.nlp.embed import OpenAIEmbedder
 
-    embedder = OpenAIEmbedder(settings.embed_model, settings.embed_base_url, settings.embed_api_key)
-    return Searcher(library, embedder, VectorIndex.load(index_path(settings.vectors_dir, settings.embed_model)))
+        searcher.embedder = OpenAIEmbedder(settings.embed_model, settings.embed_base_url, settings.embed_api_key)
+        searcher.index = VectorIndex.load(index_path(settings.vectors_dir, settings.embed_model))
+    if with_llm and not settings.missing_llm_vars():
+        from research_assistant.retrieval.rerank import LLMReranker, QueryTranslator
+
+        model = ChatModel(settings.model, settings.base_url, settings.api_key, reasoning_effort=settings.reasoning_effort)
+        searcher.reranker, searcher.translator = LLMReranker(model), QueryTranslator(model)
+    return searcher
 
 
 def make_add_papers(
