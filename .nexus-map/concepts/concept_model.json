@@ -1,0 +1,1465 @@
+{
+ "$schema": "nexus-mapper/concept-model/v1",
+ "generated_at": "2026-10-22T14:38:53Z",
+ "repo_path": "C:/Users/Azuz/Desktop/SFEDU_MASTERS/Urushkin_NLP/research-assistant",
+ "generator": "nexus-mapper v2",
+ "nodes": [
+  {
+   "id": "ra.domain-library-filling",
+   "type": "Domain",
+   "label": "Наполнение библиотеки",
+   "responsibility": "Сбор статей, разбор полных текстов и разметка: превращает тему в размеченную библиотеку фрагментов и предложений",
+   "implementation_status": "inferred",
+   "code_path": null,
+   "evidence_path": "PLAN.md",
+   "evidence_gap": "концептуальная группировка из PLAN.md: отдельного каталога домена в коде нет, системы лежат в своих пакетах",
+   "tech_stack": [],
+   "related_reqs": [],
+   "complexity": "medium",
+   "hotspot": false
+  },
+  {
+   "id": "ra.domain-storage-search",
+   "type": "Domain",
+   "label": "Хранилище и поиск",
+   "responsibility": "SQLite-библиотека с FTS5 и векторами плюс гибридный поиск по ней",
+   "implementation_status": "inferred",
+   "code_path": null,
+   "evidence_path": "PLAN.md",
+   "evidence_gap": "концептуальная группировка из PLAN.md: отдельного каталога домена в коде нет, системы лежат в своих пакетах",
+   "tech_stack": [],
+   "related_reqs": [],
+   "complexity": "medium",
+   "hotspot": false
+  },
+  {
+   "id": "ra.domain-answering",
+   "type": "Domain",
+   "label": "Ответы с цитатами",
+   "responsibility": "Агентный цикл и цитирование по ID предложений: вопрос пользователя → ответ с дословными цитатами",
+   "implementation_status": "inferred",
+   "code_path": null,
+   "evidence_path": "PLAN.md",
+   "evidence_gap": "концептуальная группировка из PLAN.md: отдельного каталога домена в коде нет, системы лежат в своих пакетах",
+   "tech_stack": [],
+   "related_reqs": [],
+   "complexity": "medium",
+   "hotspot": false
+  },
+  {
+   "id": "ra.domain-quality",
+   "type": "Domain",
+   "label": "Оценка качества",
+   "responsibility": "Золотые наборы и метрики поиска, разметки и агента; журнал экспериментов",
+   "implementation_status": "inferred",
+   "code_path": null,
+   "evidence_path": "docs/experiments.md",
+   "evidence_gap": "концептуальная группировка из PLAN.md: отдельного каталога домена в коде нет, системы лежат в своих пакетах",
+   "tech_stack": [],
+   "related_reqs": [],
+   "complexity": "medium",
+   "hotspot": false
+  },
+  {
+   "id": "ra.ingest",
+   "type": "System",
+   "label": "Сбор статей",
+   "responsibility": "Поиск в OpenAlex/arXiv, слияние дублей, HTTP с паузами и кэшем, robots.txt, скачивание PDF и страниц CyberLeninka",
+   "implementation_status": "implemented",
+   "code_path": "src/research_assistant/ingest/",
+   "evidence_path": null,
+   "evidence_gap": null,
+   "tech_stack": [
+    "httpx",
+    "protego",
+    "xml.etree"
+   ],
+   "related_reqs": [],
+   "complexity": "medium",
+   "hotspot": false
+  },
+  {
+   "id": "ra.parse",
+   "type": "System",
+   "label": "Разбор полных текстов",
+   "responsibility": "PDF (PyMuPDF) и HTML CyberLeninka → разделы с типом → фрагменты → предложения с позициями и страницами",
+   "implementation_status": "implemented",
+   "code_path": "src/research_assistant/parse/",
+   "evidence_path": null,
+   "evidence_gap": null,
+   "tech_stack": [
+    "pymupdf",
+    "beautifulsoup4",
+    "razdel"
+   ],
+   "related_reqs": [],
+   "complexity": "high",
+   "hotspot": false
+  },
+  {
+   "id": "ra.annotation",
+   "type": "System",
+   "label": "Разметка статей",
+   "responsibility": "Сущности (метод/датасет/метрика/задача) чат-моделью с проверкой по тексту и ключевые слова YAKE",
+   "implementation_status": "implemented",
+   "code_path": "src/research_assistant/nlp/annotate.py",
+   "evidence_path": null,
+   "evidence_gap": null,
+   "tech_stack": [
+    "openai",
+    "yake",
+    "snowballstemmer"
+   ],
+   "related_reqs": [],
+   "complexity": "medium",
+   "hotspot": false
+  },
+  {
+   "id": "ra.store",
+   "type": "System",
+   "label": "Хранилище библиотеки",
+   "responsibility": "SQLite: статьи, темы, разделы, фрагменты, предложения, разметка, FTS5 по основам слов; векторы в .npz",
+   "implementation_status": "implemented",
+   "code_path": "src/research_assistant/store/",
+   "evidence_path": null,
+   "evidence_gap": null,
+   "tech_stack": [
+    "sqlite3",
+    "fts5",
+    "numpy"
+   ],
+   "related_reqs": [],
+   "complexity": "high",
+   "hotspot": false
+  },
+  {
+   "id": "ra.retrieval",
+   "type": "System",
+   "label": "Поиск",
+   "responsibility": "BM25 (FTS5), плотный поиск по эмбеддингам, слияние RRF, перевод запроса и listwise-реранкер",
+   "implementation_status": "implemented",
+   "code_path": "src/research_assistant/retrieval/",
+   "evidence_path": null,
+   "evidence_gap": null,
+   "tech_stack": [
+    "numpy",
+    "openai"
+   ],
+   "related_reqs": [],
+   "complexity": "medium",
+   "hotspot": false
+  },
+  {
+   "id": "ra.agent",
+   "type": "System",
+   "label": "Агент",
+   "responsibility": "Свой цикл модель → инструменты → наблюдения, бюджет шагов, журнал JSONL, ответ с цитатами по ID предложений",
+   "implementation_status": "implemented",
+   "code_path": "src/research_assistant/agent/",
+   "evidence_path": null,
+   "evidence_gap": null,
+   "tech_stack": [
+    "openai"
+   ],
+   "related_reqs": [],
+   "complexity": "high",
+   "hotspot": false
+  },
+  {
+   "id": "ra.evaluation",
+   "type": "System",
+   "label": "Оценка",
+   "responsibility": "Recall/MRR/nDCG поиска, P/R/F1 разметки, pass@1/pass^k агента с интервалом Вильсона, пересчёт по журналам",
+   "implementation_status": "implemented",
+   "code_path": "src/research_assistant/evaluation/",
+   "evidence_path": null,
+   "evidence_gap": null,
+   "tech_stack": [
+    "python"
+   ],
+   "related_reqs": [],
+   "complexity": "medium",
+   "hotspot": false
+  },
+  {
+   "id": "ra.cli",
+   "type": "System",
+   "label": "Командная строка",
+   "responsibility": "Точка входа research-assistant: все команды от ingest до eval-agent; зависит почти от всех систем",
+   "implementation_status": "implemented",
+   "code_path": "src/research_assistant/cli.py",
+   "evidence_path": null,
+   "evidence_gap": null,
+   "tech_stack": [
+    "argparse"
+   ],
+   "related_reqs": [],
+   "complexity": "high",
+   "hotspot": true
+  },
+  {
+   "id": "ra.core-text",
+   "type": "Module",
+   "label": "Анализатор текста",
+   "responsibility": "Токены, стоп-слова, основы Snowball (en/ru), определение языка — общий фундамент поиска, хранилища и разметки",
+   "implementation_status": "implemented",
+   "code_path": "src/research_assistant/nlp/text.py",
+   "evidence_path": null,
+   "evidence_gap": null,
+   "tech_stack": [
+    "snowballstemmer"
+   ],
+   "related_reqs": [],
+   "complexity": "low",
+   "hotspot": false
+  },
+  {
+   "id": "ra.core-models",
+   "type": "Module",
+   "label": "Модель статьи PaperRecord",
+   "responsibility": "Доменная запись статьи и нормализация DOI/arXiv/заголовка; лежит в ingest, но используется 18 модулями",
+   "implementation_status": "implemented",
+   "code_path": "src/research_assistant/ingest/models.py",
+   "evidence_path": null,
+   "evidence_gap": null,
+   "tech_stack": [],
+   "related_reqs": [],
+   "complexity": "low",
+   "hotspot": false
+  },
+  {
+   "id": "ra.core-config",
+   "type": "Module",
+   "label": "Настройки",
+   "responsibility": "Settings из .env: модель, эмбеддинги, пути, лимит шагов, reasoning_effort",
+   "implementation_status": "implemented",
+   "code_path": "src/research_assistant/config.py",
+   "evidence_path": null,
+   "evidence_gap": null,
+   "tech_stack": [
+    "python-dotenv"
+   ],
+   "related_reqs": [],
+   "complexity": "low",
+   "hotspot": false
+  },
+  {
+   "id": "ra.core-llm",
+   "type": "Module",
+   "label": "Клиент чат-модели",
+   "responsibility": "ChatModel поверх OpenAI-совместимого API и учёт токенов Usage",
+   "implementation_status": "implemented",
+   "code_path": "src/research_assistant/llm.py",
+   "evidence_path": null,
+   "evidence_gap": null,
+   "tech_stack": [
+    "openai"
+   ],
+   "related_reqs": [],
+   "complexity": "low",
+   "hotspot": false
+  },
+  {
+   "id": "ra.agent-session",
+   "type": "Module",
+   "label": "Сборка агента",
+   "responsibility": "Точка сборки: Searcher, внешние источники, добавление статей; используется CLI для search/ask/chat/eval-agent",
+   "implementation_status": "implemented",
+   "code_path": "src/research_assistant/agent/session.py",
+   "evidence_path": null,
+   "evidence_gap": null,
+   "tech_stack": [],
+   "related_reqs": [],
+   "complexity": "medium",
+   "hotspot": false
+  },
+  {
+   "id": "ra.agent-loop",
+   "type": "Module",
+   "label": "Агентный цикл",
+   "responsibility": "run_agent: лимит шагов, ошибки как наблюдения, prefetch/single_shot/quotes, проверка final_answer",
+   "implementation_status": "implemented",
+   "code_path": "src/research_assistant/agent/loop.py",
+   "evidence_path": null,
+   "evidence_gap": null,
+   "tech_stack": [],
+   "related_reqs": [],
+   "complexity": "high",
+   "hotspot": false
+  },
+  {
+   "id": "ra.agent-tools",
+   "type": "Module",
+   "label": "Инструменты агента",
+   "responsibility": "search_library, read_passage, library_overview, list_entities, compare_papers, search_external, add_papers",
+   "implementation_status": "implemented",
+   "code_path": "src/research_assistant/agent/tools.py",
+   "evidence_path": null,
+   "evidence_gap": null,
+   "tech_stack": [],
+   "related_reqs": [],
+   "complexity": "medium",
+   "hotspot": false
+  },
+  {
+   "id": "ra.answer-citations",
+   "type": "Module",
+   "label": "Цитаты по ID",
+   "responsibility": "Текст цитаты, статья, раздел и страница по ID предложения; разбор форм s123/[s123]",
+   "implementation_status": "implemented",
+   "code_path": "src/research_assistant/answer/citations.py",
+   "evidence_path": null,
+   "evidence_gap": null,
+   "tech_stack": [],
+   "related_reqs": [],
+   "complexity": "low",
+   "hotspot": false
+  },
+  {
+   "id": "ra.store-db",
+   "type": "Module",
+   "label": "Library (SQLite)",
+   "responsibility": "Схема, upsert со слиянием, разбор/разметка/FTS в одной транзакции, фильтры PassageFilter",
+   "implementation_status": "implemented",
+   "code_path": "src/research_assistant/store/db.py",
+   "evidence_path": null,
+   "evidence_gap": null,
+   "tech_stack": [],
+   "related_reqs": [],
+   "complexity": "high",
+   "hotspot": true
+  },
+  {
+   "id": "ra.parse-structure",
+   "type": "Module",
+   "label": "Сборка структуры документа",
+   "responsibility": "Заголовки, шапка статьи, литература и приложения, склейка абзацев, снятие переносов",
+   "implementation_status": "implemented",
+   "code_path": "src/research_assistant/parse/structure.py",
+   "evidence_path": null,
+   "evidence_gap": null,
+   "tech_stack": [],
+   "related_reqs": [],
+   "complexity": "high",
+   "hotspot": false
+  },
+  {
+   "id": "ra.nlp-entities",
+   "type": "Module",
+   "label": "Извлечение сущностей",
+   "responsibility": "Промпт и JSON-схема, проверка по тексту через основы слов; здесь же общие contains_stems и parse_json",
+   "implementation_status": "implemented",
+   "code_path": "src/research_assistant/nlp/entities.py",
+   "evidence_path": null,
+   "evidence_gap": null,
+   "tech_stack": [],
+   "related_reqs": [],
+   "complexity": "medium",
+   "hotspot": false
+  },
+  {
+   "id": "ra.nlp-embed",
+   "type": "Module",
+   "label": "Клиент эмбеддингов",
+   "responsibility": "OpenAIEmbedder: батчи к /v1/embeddings, префиксы запроса/документа для nomic/e5/qwen3-embedding",
+   "implementation_status": "implemented",
+   "code_path": "src/research_assistant/nlp/embed.py",
+   "evidence_path": null,
+   "evidence_gap": null,
+   "tech_stack": [],
+   "related_reqs": [],
+   "complexity": "low",
+   "hotspot": false
+  },
+  {
+   "id": "ra.eval-data",
+   "type": "Module",
+   "label": "Золотые наборы",
+   "responsibility": "retrieval_gold.jsonl (30 вопросов), entities_gold.jsonl (30 аннотаций), скрипт перевода запросов",
+   "implementation_status": "implemented",
+   "code_path": "eval/",
+   "evidence_path": null,
+   "evidence_gap": null,
+   "tech_stack": [
+    "jsonl"
+   ],
+   "related_reqs": [],
+   "complexity": "low",
+   "hotspot": false
+  }
+ ],
+ "edges": [
+  {
+   "source": "ra.domain-library-filling",
+   "target": "ra.ingest",
+   "type": "contains"
+  },
+  {
+   "source": "ra.domain-library-filling",
+   "target": "ra.parse",
+   "type": "contains"
+  },
+  {
+   "source": "ra.domain-library-filling",
+   "target": "ra.annotation",
+   "type": "contains"
+  },
+  {
+   "source": "ra.domain-storage-search",
+   "target": "ra.store",
+   "type": "contains"
+  },
+  {
+   "source": "ra.domain-storage-search",
+   "target": "ra.retrieval",
+   "type": "contains"
+  },
+  {
+   "source": "ra.domain-answering",
+   "target": "ra.agent",
+   "type": "contains"
+  },
+  {
+   "source": "ra.domain-quality",
+   "target": "ra.evaluation",
+   "type": "contains"
+  },
+  {
+   "source": "ra.ingest",
+   "target": "ra.core-models",
+   "type": "contains"
+  },
+  {
+   "source": "ra.annotation",
+   "target": "ra.nlp-entities",
+   "type": "contains"
+  },
+  {
+   "source": "ra.annotation",
+   "target": "ra.core-text",
+   "type": "contains"
+  },
+  {
+   "source": "ra.store",
+   "target": "ra.store-db",
+   "type": "contains"
+  },
+  {
+   "source": "ra.retrieval",
+   "target": "ra.nlp-embed",
+   "type": "contains"
+  },
+  {
+   "source": "ra.parse",
+   "target": "ra.parse-structure",
+   "type": "contains"
+  },
+  {
+   "source": "ra.agent",
+   "target": "ra.agent-session",
+   "type": "contains"
+  },
+  {
+   "source": "ra.agent",
+   "target": "ra.agent-loop",
+   "type": "contains"
+  },
+  {
+   "source": "ra.agent",
+   "target": "ra.agent-tools",
+   "type": "contains"
+  },
+  {
+   "source": "ra.agent",
+   "target": "ra.answer-citations",
+   "type": "contains"
+  },
+  {
+   "source": "ra.agent",
+   "target": "ra.core-llm",
+   "type": "contains"
+  },
+  {
+   "source": "ra.cli",
+   "target": "ra.core-config",
+   "type": "contains"
+  },
+  {
+   "source": "ra.evaluation",
+   "target": "ra.eval-data",
+   "type": "contains"
+  },
+  {
+   "source": "ra.cli",
+   "target": "ra.store",
+   "type": "depends_on",
+   "description": "14 импортов: почти каждая команда открывает Library"
+  },
+  {
+   "source": "ra.cli",
+   "target": "ra.ingest",
+   "type": "depends_on",
+   "description": "команда ingest"
+  },
+  {
+   "source": "ra.cli",
+   "target": "ra.evaluation",
+   "type": "depends_on",
+   "description": "eval-retrieval, eval-entities, eval-agent"
+  },
+  {
+   "source": "ra.cli",
+   "target": "ra.agent",
+   "type": "depends_on",
+   "description": "ask, chat, eval-agent через agent/session.py"
+  },
+  {
+   "source": "ra.cli",
+   "target": "ra.parse",
+   "type": "depends_on",
+   "description": "parse, show, ingest"
+  },
+  {
+   "source": "ra.cli",
+   "target": "ra.annotation",
+   "type": "depends_on",
+   "description": "annotate, ingest --annotate"
+  },
+  {
+   "source": "ra.cli",
+   "target": "ra.retrieval",
+   "type": "depends_on",
+   "description": "search, index"
+  },
+  {
+   "source": "ra.agent",
+   "target": "ra.retrieval",
+   "type": "depends_on",
+   "description": "search_library, compare_papers"
+  },
+  {
+   "source": "ra.agent",
+   "target": "ra.store",
+   "type": "depends_on",
+   "description": "Library, PassageFilter"
+  },
+  {
+   "source": "ra.agent",
+   "target": "ra.ingest",
+   "type": "depends_on",
+   "description": "search_external, add_papers"
+  },
+  {
+   "source": "ra.agent",
+   "target": "ra.parse",
+   "type": "depends_on",
+   "description": "add_papers разбирает новые статьи (session.py)"
+  },
+  {
+   "source": "ra.agent",
+   "target": "ra.annotation",
+   "type": "depends_on",
+   "description": "add_papers размечает новые статьи (session.py)"
+  },
+  {
+   "source": "ra.retrieval",
+   "target": "ra.store",
+   "type": "depends_on",
+   "description": "search_fts, passages_by_ids, VectorIndex"
+  },
+  {
+   "source": "ra.retrieval",
+   "target": "ra.nlp-entities",
+   "type": "depends_on",
+   "description": "rerank.py берёт parse_json"
+  },
+  {
+   "source": "ra.annotation",
+   "target": "ra.store",
+   "type": "depends_on",
+   "description": "save_annotation"
+  },
+  {
+   "source": "ra.ingest",
+   "target": "ra.store",
+   "type": "depends_on",
+   "description": "ingest/pipeline.py пишет в Library"
+  },
+  {
+   "source": "ra.parse",
+   "target": "ra.store",
+   "type": "depends_on",
+   "description": "parse/pipeline.py пишет save_structure"
+  },
+  {
+   "source": "ra.store",
+   "target": "ra.core-text",
+   "type": "depends_on",
+   "description": "analyze для FTS5 и ключей сущностей"
+  },
+  {
+   "source": "ra.store",
+   "target": "ra.nlp-entities",
+   "type": "depends_on",
+   "description": "ленивый импорт contains_stems в _link_mentions"
+  },
+  {
+   "source": "ra.store",
+   "target": "ra.core-models",
+   "type": "depends_on",
+   "description": "upsert PaperRecord"
+  },
+  {
+   "source": "ra.evaluation",
+   "target": "ra.agent",
+   "type": "depends_on",
+   "description": "run_agent и восстановление результатов из журнала"
+  },
+  {
+   "source": "ra.evaluation",
+   "target": "ra.store",
+   "type": "depends_on",
+   "description": "resolve золотых цитат"
+  },
+  {
+   "source": "ra.evaluation",
+   "target": "ra.annotation",
+   "type": "depends_on",
+   "description": "extract_entities"
+  },
+  {
+   "source": "eval.translate_queries",
+   "target": "src.research_assistant.config",
+   "type": "imports"
+  },
+  {
+   "source": "eval.translate_queries",
+   "target": "src.research_assistant.evaluation.retrieval",
+   "type": "imports"
+  },
+  {
+   "source": "eval.translate_queries",
+   "target": "src.research_assistant.nlp.text",
+   "type": "imports"
+  },
+  {
+   "source": "eval.translate_queries",
+   "target": "src.research_assistant.retrieval.search",
+   "type": "imports"
+  },
+  {
+   "source": "eval.translate_queries",
+   "target": "src.research_assistant.store.db",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.agent.loop",
+   "target": "src.research_assistant.agent.prompts",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.agent.loop",
+   "target": "src.research_assistant.agent.tools",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.agent.loop",
+   "target": "src.research_assistant.answer.citations",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.agent.loop",
+   "target": "src.research_assistant.llm",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.agent.session",
+   "target": "src.research_assistant.agent.tools",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.agent.session",
+   "target": "src.research_assistant.config",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.agent.session",
+   "target": "src.research_assistant.ingest.download",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.agent.session",
+   "target": "src.research_assistant.ingest.http",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.agent.session",
+   "target": "src.research_assistant.ingest.models",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.agent.session",
+   "target": "src.research_assistant.ingest.robots",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.agent.session",
+   "target": "src.research_assistant.ingest.sources.arxiv",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.agent.session",
+   "target": "src.research_assistant.ingest.sources.openalex",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.agent.session",
+   "target": "src.research_assistant.llm",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.agent.session",
+   "target": "src.research_assistant.nlp.annotate",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.agent.session",
+   "target": "src.research_assistant.parse.pipeline",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.agent.session",
+   "target": "src.research_assistant.retrieval.search",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.agent.session",
+   "target": "src.research_assistant.store.db",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.agent.session",
+   "target": "src.research_assistant.store.vectors",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.agent.session",
+   "target": "src.research_assistant.nlp.embed",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.agent.session",
+   "target": "src.research_assistant.retrieval.rerank",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.agent.tools",
+   "target": "src.research_assistant.ingest.models",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.agent.tools",
+   "target": "src.research_assistant.ingest.pipeline",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.agent.tools",
+   "target": "src.research_assistant.retrieval.search",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.agent.tools",
+   "target": "src.research_assistant.store.db",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.answer.citations",
+   "target": "src.research_assistant.store.db",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.cli",
+   "target": "src.research_assistant.config",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.cli",
+   "target": "src.research_assistant.ingest.sources.arxiv",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.cli",
+   "target": "src.research_assistant.ingest.sources.openalex",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.cli",
+   "target": "src.research_assistant.ingest.download",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.cli",
+   "target": "src.research_assistant.ingest.http",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.cli",
+   "target": "src.research_assistant.ingest.pipeline",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.cli",
+   "target": "src.research_assistant.ingest.robots",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.cli",
+   "target": "src.research_assistant.store.db",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.cli",
+   "target": "src.research_assistant.parse.pipeline",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.cli",
+   "target": "src.research_assistant.llm",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.cli",
+   "target": "src.research_assistant.nlp.annotate",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.cli",
+   "target": "src.research_assistant.agent.session",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.cli",
+   "target": "src.research_assistant.nlp.embed",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.cli",
+   "target": "src.research_assistant.retrieval.search",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.cli",
+   "target": "src.research_assistant.store.vectors",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.cli",
+   "target": "src.research_assistant.evaluation.retrieval",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.cli",
+   "target": "src.research_assistant.answer.citations",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.cli",
+   "target": "src.research_assistant.agent.loop",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.cli",
+   "target": "src.research_assistant.evaluation.entities",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.cli",
+   "target": "src.research_assistant.evaluation.agent",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.evaluation.agent",
+   "target": "src.research_assistant.agent.loop",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.evaluation.agent",
+   "target": "src.research_assistant.agent.tools",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.evaluation.agent",
+   "target": "src.research_assistant.answer.citations",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.evaluation.agent",
+   "target": "src.research_assistant.llm",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.evaluation.agent",
+   "target": "src.research_assistant.evaluation.retrieval",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.evaluation.agent",
+   "target": "src.research_assistant.store.db",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.evaluation.entities",
+   "target": "src.research_assistant.nlp.entities",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.evaluation.entities",
+   "target": "src.research_assistant.nlp.text",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.evaluation.retrieval",
+   "target": "src.research_assistant.ingest.models",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.evaluation.retrieval",
+   "target": "src.research_assistant.nlp.text",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.evaluation.retrieval",
+   "target": "src.research_assistant.store.db",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.ingest.dedup",
+   "target": "src.research_assistant.ingest.models",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.ingest.download",
+   "target": "src.research_assistant.ingest.http",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.ingest.download",
+   "target": "src.research_assistant.ingest.robots",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.ingest.pipeline",
+   "target": "src.research_assistant.ingest.dedup",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.ingest.pipeline",
+   "target": "src.research_assistant.ingest.download",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.ingest.pipeline",
+   "target": "src.research_assistant.ingest.models",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.ingest.pipeline",
+   "target": "src.research_assistant.ingest.sources",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.ingest.pipeline",
+   "target": "src.research_assistant.store.db",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.ingest.robots",
+   "target": "src.research_assistant.ingest.http",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.ingest.sources",
+   "target": "src.research_assistant.ingest.models",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.ingest.sources.arxiv",
+   "target": "src.research_assistant.ingest.http",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.ingest.sources.arxiv",
+   "target": "src.research_assistant.ingest.models",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.ingest.sources.openalex",
+   "target": "src.research_assistant.ingest.http",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.ingest.sources.openalex",
+   "target": "src.research_assistant.ingest.models",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.nlp.annotate",
+   "target": "src.research_assistant.nlp.entities",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.nlp.annotate",
+   "target": "src.research_assistant.nlp.keywords",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.nlp.annotate",
+   "target": "src.research_assistant.store.db",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.nlp.entities",
+   "target": "src.research_assistant.nlp.text",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.nlp.keywords",
+   "target": "src.research_assistant.nlp.text",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.parse.html",
+   "target": "src.research_assistant.parse.units",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.parse.passages",
+   "target": "src.research_assistant.parse.sentences",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.parse.passages",
+   "target": "src.research_assistant.parse.structure",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.parse.pdf",
+   "target": "src.research_assistant.parse.units",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.parse.pipeline",
+   "target": "src.research_assistant.parse.html",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.parse.pipeline",
+   "target": "src.research_assistant.parse.passages",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.parse.pipeline",
+   "target": "src.research_assistant.parse.pdf",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.parse.pipeline",
+   "target": "src.research_assistant.parse.structure",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.parse.pipeline",
+   "target": "src.research_assistant.store.db",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.parse.structure",
+   "target": "src.research_assistant.ingest.models",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.parse.structure",
+   "target": "src.research_assistant.parse.units",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.retrieval.rerank",
+   "target": "src.research_assistant.nlp.entities",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.retrieval.rerank",
+   "target": "src.research_assistant.nlp.text",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.retrieval.search",
+   "target": "src.research_assistant.store.db",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.retrieval.search",
+   "target": "src.research_assistant.store.vectors",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.store.db",
+   "target": "src.research_assistant.ingest.models",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.store.db",
+   "target": "src.research_assistant.nlp.text",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.store.db",
+   "target": "src.research_assistant.nlp.entities",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_agent",
+   "target": "src.research_assistant.agent.loop",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_agent",
+   "target": "src.research_assistant.agent.tools",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_agent",
+   "target": "src.research_assistant.answer.citations",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_agent",
+   "target": "src.research_assistant.ingest.models",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_agent",
+   "target": "src.research_assistant.llm",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_agent",
+   "target": "src.research_assistant.parse.passages",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_agent",
+   "target": "src.research_assistant.parse.structure",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_agent",
+   "target": "src.research_assistant.retrieval.search",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_agent",
+   "target": "src.research_assistant.store.db",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_agent",
+   "target": "src.research_assistant.evaluation.agent",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_agent",
+   "target": "src.research_assistant.evaluation.retrieval",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_annotation",
+   "target": "src.research_assistant.agent.tools",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_annotation",
+   "target": "src.research_assistant.evaluation.entities",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_annotation",
+   "target": "src.research_assistant.ingest.models",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_annotation",
+   "target": "src.research_assistant.llm",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_annotation",
+   "target": "src.research_assistant.nlp.annotate",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_annotation",
+   "target": "src.research_assistant.nlp.entities",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_annotation",
+   "target": "src.research_assistant.nlp.keywords",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_annotation",
+   "target": "src.research_assistant.parse.passages",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_annotation",
+   "target": "src.research_assistant.parse.structure",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_annotation",
+   "target": "src.research_assistant.retrieval.search",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_annotation",
+   "target": "src.research_assistant.store.db",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_cli",
+   "target": "src.research_assistant.cli",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_config",
+   "target": "src.research_assistant.config",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_db",
+   "target": "src.research_assistant.ingest.models",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_db",
+   "target": "src.research_assistant.store.db",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_download",
+   "target": "src.research_assistant.ingest.download",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_download",
+   "target": "src.research_assistant.ingest.http",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_download",
+   "target": "src.research_assistant.ingest.robots",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_eval_retrieval",
+   "target": "src.research_assistant.evaluation.retrieval",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_eval_retrieval",
+   "target": "src.research_assistant.ingest.models",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_eval_retrieval",
+   "target": "src.research_assistant.parse.passages",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_eval_retrieval",
+   "target": "src.research_assistant.parse.structure",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_eval_retrieval",
+   "target": "src.research_assistant.retrieval.search",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_eval_retrieval",
+   "target": "src.research_assistant.store.db",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_http",
+   "target": "src.research_assistant.ingest.http",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_http",
+   "target": "src.research_assistant.ingest.robots",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_models",
+   "target": "src.research_assistant.ingest.dedup",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_models",
+   "target": "src.research_assistant.ingest.models",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_parse_files",
+   "target": "src.research_assistant.parse.html",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_parse_files",
+   "target": "src.research_assistant.parse.passages",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_parse_files",
+   "target": "src.research_assistant.parse.pdf",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_parse_files",
+   "target": "src.research_assistant.parse.structure",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_parse_pipeline",
+   "target": "src.research_assistant.ingest.models",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_parse_pipeline",
+   "target": "src.research_assistant.parse.pipeline",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_parse_pipeline",
+   "target": "src.research_assistant.store.db",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_pipeline",
+   "target": "src.research_assistant.ingest.download",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_pipeline",
+   "target": "src.research_assistant.ingest.models",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_pipeline",
+   "target": "src.research_assistant.ingest.pipeline",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_pipeline",
+   "target": "src.research_assistant.store.db",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_search",
+   "target": "src.research_assistant.ingest.models",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_search",
+   "target": "src.research_assistant.nlp.embed",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_search",
+   "target": "src.research_assistant.nlp.text",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_search",
+   "target": "src.research_assistant.parse.passages",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_search",
+   "target": "src.research_assistant.parse.structure",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_search",
+   "target": "src.research_assistant.retrieval.search",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_search",
+   "target": "src.research_assistant.store.db",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_search",
+   "target": "src.research_assistant.store.vectors",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_search",
+   "target": "src.research_assistant.llm",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_search",
+   "target": "src.research_assistant.retrieval.rerank",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_sentences",
+   "target": "src.research_assistant.parse.sentences",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_sources",
+   "target": "src.research_assistant.ingest.http",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_sources",
+   "target": "src.research_assistant.ingest.sources.arxiv",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_sources",
+   "target": "src.research_assistant.ingest.sources.openalex",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_structure",
+   "target": "src.research_assistant.parse.passages",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_structure",
+   "target": "src.research_assistant.parse.structure",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_structure",
+   "target": "src.research_assistant.parse.units",
+   "type": "imports"
+  }
+ ],
+ "metadata": {
+  "total_files": 62,
+  "total_lines": 7020,
+  "languages": [
+   "python"
+  ],
+  "git_commits_analyzed": 6,
+  "analysis_days": 90
+ }
+}

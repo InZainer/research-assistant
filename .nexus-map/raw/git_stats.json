@@ -1,0 +1,231 @@
+{
+  "analysis_period_days": 90,
+  "stats": {
+    "total_commits": 6,
+    "total_authors": 1
+  },
+  "hotspots": [
+    {
+      "path": "AGENTS.md",
+      "changes": 6,
+      "risk": "medium"
+    },
+    {
+      "path": "PLAN.md",
+      "changes": 6,
+      "risk": "medium"
+    },
+    {
+      "path": "README.md",
+      "changes": 6,
+      "risk": "medium"
+    },
+    {
+      "path": "src/research_assistant/cli.py",
+      "changes": 6,
+      "risk": "medium"
+    },
+    {
+      "path": "docs/experiments.md",
+      "changes": 4,
+      "risk": "low"
+    },
+    {
+      "path": "pyproject.toml",
+      "changes": 4,
+      "risk": "low"
+    },
+    {
+      "path": "src/research_assistant/store/db.py",
+      "changes": 4,
+      "risk": "low"
+    },
+    {
+      "path": "uv.lock",
+      "changes": 4,
+      "risk": "low"
+    },
+    {
+      "path": "src/research_assistant/agent/prompts.py",
+      "changes": 3,
+      "risk": "low"
+    },
+    {
+      "path": "src/research_assistant/agent/session.py",
+      "changes": 3,
+      "risk": "low"
+    },
+    {
+      "path": "src/research_assistant/agent/tools.py",
+      "changes": 3,
+      "risk": "low"
+    },
+    {
+      "path": "tests/test_agent.py",
+      "changes": 3,
+      "risk": "low"
+    },
+    {
+      "path": ".env.example",
+      "changes": 3,
+      "risk": "low"
+    },
+    {
+      "path": "src/research_assistant/config.py",
+      "changes": 3,
+      "risk": "low"
+    },
+    {
+      "path": "tests/test_config.py",
+      "changes": 3,
+      "risk": "low"
+    },
+    {
+      "path": "src/research_assistant/agent/loop.py",
+      "changes": 2,
+      "risk": "low"
+    },
+    {
+      "path": "src/research_assistant/evaluation/retrieval.py",
+      "changes": 2,
+      "risk": "low"
+    },
+    {
+      "path": "src/research_assistant/retrieval/search.py",
+      "changes": 2,
+      "risk": "low"
+    },
+    {
+      "path": "tests/test_search.py",
+      "changes": 2,
+      "risk": "low"
+    },
+    {
+      "path": "src/research_assistant/nlp/embed.py",
+      "changes": 2,
+      "risk": "low"
+    }
+  ],
+  "coupling_pairs": [
+    {
+      "file_a": "AGENTS.md",
+      "file_b": "PLAN.md",
+      "co_changes": 6,
+      "coupling_score": 1.0
+    },
+    {
+      "file_a": "AGENTS.md",
+      "file_b": "README.md",
+      "co_changes": 6,
+      "coupling_score": 1.0
+    },
+    {
+      "file_a": "AGENTS.md",
+      "file_b": "src/research_assistant/cli.py",
+      "co_changes": 6,
+      "coupling_score": 1.0
+    },
+    {
+      "file_a": "PLAN.md",
+      "file_b": "README.md",
+      "co_changes": 6,
+      "coupling_score": 1.0
+    },
+    {
+      "file_a": "PLAN.md",
+      "file_b": "src/research_assistant/cli.py",
+      "co_changes": 6,
+      "coupling_score": 1.0
+    },
+    {
+      "file_a": "README.md",
+      "file_b": "src/research_assistant/cli.py",
+      "co_changes": 6,
+      "coupling_score": 1.0
+    },
+    {
+      "file_a": "AGENTS.md",
+      "file_b": "docs/experiments.md",
+      "co_changes": 4,
+      "coupling_score": 1.0
+    },
+    {
+      "file_a": "PLAN.md",
+      "file_b": "docs/experiments.md",
+      "co_changes": 4,
+      "coupling_score": 1.0
+    },
+    {
+      "file_a": "README.md",
+      "file_b": "docs/experiments.md",
+      "co_changes": 4,
+      "coupling_score": 1.0
+    },
+    {
+      "file_a": "docs/experiments.md",
+      "file_b": "src/research_assistant/cli.py",
+      "co_changes": 4,
+      "coupling_score": 1.0
+    },
+    {
+      "file_a": "AGENTS.md",
+      "file_b": "pyproject.toml",
+      "co_changes": 4,
+      "coupling_score": 1.0
+    },
+    {
+      "file_a": "AGENTS.md",
+      "file_b": "src/research_assistant/store/db.py",
+      "co_changes": 4,
+      "coupling_score": 1.0
+    },
+    {
+      "file_a": "AGENTS.md",
+      "file_b": "uv.lock",
+      "co_changes": 4,
+      "coupling_score": 1.0
+    },
+    {
+      "file_a": "PLAN.md",
+      "file_b": "pyproject.toml",
+      "co_changes": 4,
+      "coupling_score": 1.0
+    },
+    {
+      "file_a": "PLAN.md",
+      "file_b": "src/research_assistant/store/db.py",
+      "co_changes": 4,
+      "coupling_score": 1.0
+    },
+    {
+      "file_a": "PLAN.md",
+      "file_b": "uv.lock",
+      "co_changes": 4,
+      "coupling_score": 1.0
+    },
+    {
+      "file_a": "README.md",
+      "file_b": "pyproject.toml",
+      "co_changes": 4,
+      "coupling_score": 1.0
+    },
+    {
+      "file_a": "README.md",
+      "file_b": "src/research_assistant/store/db.py",
+      "co_changes": 4,
+      "coupling_score": 1.0
+    },
+    {
+      "file_a": "README.md",
+      "file_b": "uv.lock",
+      "co_changes": 4,
+      "coupling_score": 1.0
+    },
+    {
+      "file_a": "pyproject.toml",
+      "file_b": "src/research_assistant/cli.py",
+      "co_changes": 4,
+      "coupling_score": 1.0
+    }
+  ]
+}
