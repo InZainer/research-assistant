@@ -53,3 +53,12 @@
 ## Командная строка — `cli.py`, `config.py`
 - `cli.py` (639 строк) — 14 команд: check, ingest, library, parse, show, index, search, eval-retrieval, annotate, entities, eval-entities, eval-agent, ask, chat. Импортирует 20 внутренних модулей.
 - `config.py` — `Settings` из `.env` (значения ключей не анализировались).
+
+## Веб-интерфейс — `ui/` (этап 8, дописано вручную после картирования)
+- `views.py` — данные для страниц без Streamlit: `source_link` (PDF со страницей `#page=N`), `sentence_context`, `answer_view`/`CitationCard`, `describe_event` (шаги агента словами), `friendly_error`, `highlight`, `hit_rows`, `paper_card`. Тесты — `tests/test_ui.py`.
+- `chats.py` — `ChatStore`: чат = JSON в `data/chats/`, память агента из сохранённых ответов.
+- `app.py` — страница Streamlit, три раздела; агент через `agent/session.make_agent` с `prefetch=True` и `on_event`, поиск статей через `retrieval/papers.find_papers`. База открывается на каждый перезапуск скрипта (SQLite не делится между потоками).
+
+## Поиск статей — `retrieval/papers.py` (дописано вручную)
+- `find_papers`: автор (начала слов в имени одного автора), все слова запроса в названии/аннотации по основам, затем до 5 похожих по смыслу аннотаций (плотный поиск по разделам `abstract`). Использует веб-интерфейс и инструмент агента `find_papers`. Тесты — `tests/test_papers.py`.
+- Сбор по автору (дописано вручную): `search_sources(author=...)` → `OpenAlexSource.author_ids` (профили со сверкой имени `ingest/models.author_matches`) и arXiv `au:`; результаты фильтруются по списку авторов.

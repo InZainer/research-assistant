@@ -8,6 +8,7 @@
 
 import json
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -21,6 +22,7 @@ from research_assistant.agent.tools import (
     ToolError,
     available_schemas,
     search_library,
+    wants_to_add,
 )
 from research_assistant.answer.citations import Citation, load_citations, parse_sentence_id
 from research_assistant.llm import ChatModel, Usage
@@ -56,14 +58,18 @@ class AgentResult:
 
 
 class RunLog:
-    """Журнал прогона: одна строка JSON на событие."""
+    """Журнал прогона: одна строка JSON на событие. listener получает те же события сразу —
+    так веб-интерфейс показывает, что агент делает прямо сейчас."""
 
-    def __init__(self, path: Path | None):
+    def __init__(self, path: Path | None, listener: Callable[[str, dict], None] | None = None):
         self.path = path
+        self.listener = listener
         if path is not None:
             path.parent.mkdir(parents=True, exist_ok=True)
 
     def write(self, event: str, **data) -> None:
+        if self.listener is not None:
+            self.listener(event, data)
         if self.path is None:
             return
         record = {"ts": datetime.now().isoformat(timespec="milliseconds"), "event": event, **data}
@@ -150,14 +156,17 @@ def run_agent(
     answer_mode: str = "ids",
     single_shot: bool = False,
     prefetch: bool = False,
+    on_event: Callable[[str, dict], None] | None = None,
 ) -> AgentResult:
     """answer_mode="quotes" — цитаты текстом от модели (эксперимент E2);
     single_shot=True — один поиск по вопросу и сразу ответ, без итераций (базовая линия для E3);
     prefetch=True — тот же поиск по вопросу заранее, но инструменты остаются: агент может ответить сразу
-    или искать дальше."""
+    или искать дальше.
+    on_event(событие, данные) — те же события, что пишутся в журнал (start, llm, tool, nudge, finish)."""
     started = time.perf_counter()
-    log = RunLog(log_path)
+    log = RunLog(log_path, on_event)
     result = AgentResult(question=question, answer="", log_path=str(log_path) if log_path else None)
+    ctx.allow_add = wants_to_add(question)  # качать статьи в библиотеку — только если об этом просят
     tools = available_schemas(ctx)
     if answer_mode == "quotes":
         tools = [t for t in tools if t["function"]["name"] != FINAL_ANSWER] + [FINAL_ANSWER_QUOTES]

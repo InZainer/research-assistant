@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 
 from research_assistant.ingest.dedup import dedupe
 from research_assistant.ingest.download import FulltextFetcher
-from research_assistant.ingest.models import PaperRecord
+from research_assistant.ingest.models import PaperRecord, author_matches
 from research_assistant.ingest.sources import Source
 from research_assistant.store.db import Library
 
@@ -37,16 +37,22 @@ def search_sources(
     year_from: int | None = None,
     year_to: int | None = None,
     language: str | None = None,
+    author: str | None = None,
 ) -> SearchResult:
-    """Ищет во всех источниках. Сбой одного источника не останавливает остальные."""
+    """Ищет во всех источниках. Сбой одного источника не останавливает остальные.
+    С author остаются только записи, где этот человек среди авторов: источники ищут по имени нечётко."""
     result = SearchResult(records=[])
     collected: list[PaperRecord] = []
+    extra = {"author": author} if author and author.strip() else {}
     for source in sources:
         try:
-            records = source.search(query, limit=limit, year_from=year_from, year_to=year_to, language=language)
+            records = source.search(query, limit=limit, year_from=year_from, year_to=year_to, language=language,
+                                    **extra)
         except Exception as exc:  # источник недоступен — фиксируем и идём дальше
             result.errors[source.name] = f"{type(exc).__name__}: {exc}"
             continue
+        if extra:
+            records = [r for r in records if author_matches(r.authors, author)]
         result.found[source.name] = len(records)
         collected.extend(records)
     result.records = dedupe(collected)

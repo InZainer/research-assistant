@@ -17,10 +17,11 @@
 - Поиск и его оценка: `search "<запрос>"`, `index` (эмбеддинги), `eval-retrieval`
 - Агент: `ask "<вопрос>"`, `chat`; журналы прогонов в `runs/*.jsonl`; оценка — `eval-agent --variant agent|single|quotes|prefetch`, пересчёт по журналу — `--rescore`
 - Разметка: `annotate`, `entities`, `eval-entities`; при изменении промпта или правил — увеличить `ANNOTATOR_VERSION` в `nlp/annotate.py`
+- Веб-интерфейс: `uv run research-assistant ui` (Streamlit, http://localhost:8501)
 
 ## Где что лежит
 
-- `src/research_assistant/` — код пакета. Модули по слоям: `ingest/` (сбор), `parse/` (разбор текстов), `store/` (SQLite, FTS5, векторы), `nlp/` (анализатор, эмбеддинги), `retrieval/` (поиск), `evaluation/` (метрики), `agent/` (цикл, инструменты, промпт), `answer/` (цитаты).
+- `src/research_assistant/` — код пакета. Модули по слоям: `ingest/` (сбор), `parse/` (разбор текстов), `store/` (SQLite, FTS5, векторы), `nlp/` (анализатор, эмбеддинги), `retrieval/` (поиск), `evaluation/` (метрики), `agent/` (цикл, инструменты, промпт), `answer/` (цитаты), `ui/` (Streamlit: логика в `views.py`, виджеты в `app.py`).
 - `tests/` — тесты pytest, по файлу на модуль.
 - `eval/` — наборы вопросов и задач, скрипты метрик.
 - `runs/` — журналы прогонов агента в JSONL (коммитятся только те, что нужны для отчёта).

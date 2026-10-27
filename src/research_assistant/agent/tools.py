@@ -11,6 +11,8 @@ from dataclasses import dataclass, field
 
 from research_assistant.ingest.models import PaperRecord
 from research_assistant.ingest.pipeline import search_sources
+from research_assistant.retrieval.papers import authors_of
+from research_assistant.retrieval.papers import find_papers as find_papers_in
 from research_assistant.retrieval.search import Searcher
 from research_assistant.store.db import Library, PassageFilter
 
@@ -34,6 +36,16 @@ class ToolContext:
     add_papers_fn: Callable[[list[PaperRecord], str], str] | None = None
     candidates: dict[str, PaperRecord] = field(default_factory=dict)  # последние найденные во внешних источниках
     seen_sentences: set[int] = field(default_factory=set)  # что агент видел: цитировать можно только это
+    allow_add: bool = True  # add_papers только по явной просьбе пользователя (выставляет run_agent)
+
+
+# Глаголы просьбы добавить статьи. Маленькая модель на «найди статьи» сама вызывала add_papers и качала
+# десяток статей в библиотеку, поэтому без такой просьбы инструмента у неё просто нет.
+ADD_REQUEST_RE = re.compile(r"добав|загруз|скача|сохран|занес|\badd\b|download|\bimport\b|\bsave\b", re.I)
+
+
+def wants_to_add(question: str) -> bool:
+    return bool(ADD_REQUEST_RE.search(question or ""))
 
 
 def _sentences(library: Library, passage_ids: list[int]) -> dict[int, list]:
@@ -68,7 +80,8 @@ def _format_passages(ctx: ToolContext, passages: list[dict], numbered: bool = Tr
 
 def search_library(ctx: ToolContext, query: str, k: int = 4, topic: str | None = None,
                    section_kinds: list[str] | None = None, year_from: int | None = None,
-                   year_to: int | None = None, language: str | None = None, entity: str | None = None) -> str:
+                   year_to: int | None = None, language: str | None = None, entity: str | None = None,
+                   paper_ids: list[int] | None = None) -> str:
     if not query or not query.strip():
         raise ToolError("query is empty")
     k = max(1, min(int(k), MAX_K))
@@ -80,7 +93,8 @@ def search_library(ctx: ToolContext, query: str, k: int = 4, topic: str | None =
         # (иначе ответ из такой статьи не находится — так было в первых прогонах).
         section_kinds = list(dict.fromkeys([*section_kinds, "body"]))
     where = PassageFilter(topic=topic, year_from=year_from, year_to=year_to,
-                          section_kinds=section_kinds or None, language=language, entity=entity)
+                          section_kinds=section_kinds or None, language=language, entity=entity,
+                          paper_ids=[int(i) for i in paper_ids] if paper_ids else None)
     hits = ctx.searcher.search(query, k=k, mode="hybrid", where=where)
     if not hits:
         return f'No passages found for "{query}". Try other words, English terms, or fewer filters.'
@@ -161,6 +175,28 @@ def compare_papers(ctx: ToolContext, paper_ids: list[int], aspect: str, k: int =
     return f'Comparison on "{aspect}":\n\n' + "\n\n".join(blocks)
 
 
+MAX_FIND = 10
+
+
+def find_papers(ctx: ToolContext, query: str | None = None, author: str | None = None, topic: str | None = None,
+                year_from: int | None = None, year_to: int | None = None) -> str:
+    """Статьи библиотеки по автору и/или словам из названия и аннотации. Цитат не даёт: только id статей."""
+    if not (query and query.strip()) and not (author and author.strip()):
+        raise ToolError("give query (words from title or abstract) and/or author")
+    hits = find_papers_in(ctx.library, query, author, topic, year_from, year_to, searcher=ctx.searcher, limit=MAX_FIND)
+    if not hits:
+        return "No papers found. Try another spelling of the author (Latin or Cyrillic) or fewer words."
+    lines = [f"Found {len(hits)} papers:"]
+    for hit in hits:
+        p = hit.paper
+        authors = authors_of(p)
+        names = ", ".join(authors[:4]) + (" et al." if len(authors) > 4 else "")
+        how = "similar by meaning" if hit.matched == ["semantic"] else "matched in " + " and ".join(hit.matched)
+        lines.append(f"- paper {p['id']}: \"{p['title']}\" ({p['year']}, {p['language'] or '?'}) by {names or '?'} [{how}]")
+    lines.append("To quote these papers, call search_library with paper_ids=[...].")
+    return "\n".join(lines)
+
+
 def library_overview(ctx: ToolContext, topic: str | None = None) -> str:
     if topic is None:
         rows = ctx.library.topic_summary()
@@ -180,27 +216,34 @@ def library_overview(ctx: ToolContext, topic: str | None = None) -> str:
     return "\n".join(lines)
 
 
-def search_external(ctx: ToolContext, query: str, limit: int = 8, year_from: int | None = None,
-                    language: str | None = None) -> str:
+def search_external(ctx: ToolContext, query: str | None = None, limit: int = 8, year_from: int | None = None,
+                    language: str | None = None, author: str | None = None) -> str:
     if not ctx.sources:
         raise ToolError("external search is not available in this session")
-    result = search_sources(ctx.sources, query, limit=max(1, min(int(limit), 10)), year_from=year_from,
-                            language=language)
+    if not (query and query.strip()) and not (author and author.strip()):
+        raise ToolError("give query and/or author")
+    result = search_sources(ctx.sources, query or "", limit=max(1, min(int(limit), 10)), year_from=year_from,
+                            language=language, author=author)
+    what = (f' for "{query}"' if query else "") + (f" by {author}" if author else "")
     if not result.records:
         errors = "; ".join(f"{k}: {v}" for k, v in result.errors.items())
-        return f'Nothing found for "{query}".' + (f" Source errors: {errors}" if errors else "")
-    lines = [f'Found {len(result.records)} candidate papers for "{query}" (not in the library yet unless marked):']
+        return f"Nothing found{what}." + (f" Source errors: {errors}" if errors else "")
+    lines = [f"Found {len(result.records)} candidate papers{what} (not in the library yet unless marked):"]
     for record in result.records[:10]:
         ctx.candidates[record.external_id] = record
         known = " [already in library]" if ctx.library.find_paper(record) else ""
         abstract = (record.abstract or "")[:200]
-        lines.append(f"- {record.external_id}: {record.title} ({record.year}, {record.language or '?'}){known}. {abstract}")
+        authors = ", ".join(record.authors[:3]) + (" et al." if len(record.authors) > 3 else "")
+        lines.append(f"- {record.external_id}: {record.title} ({record.year}, {record.language or '?'}) by "
+                     f"{authors or '?'}{known}. {abstract}")
     return "\n".join(lines)
 
 
 def add_papers(ctx: ToolContext, ids: list[str], topic: str) -> str:
     if ctx.add_papers_fn is None:
         raise ToolError("adding papers is not available in this session")
+    if not ctx.allow_add:
+        raise ToolError("the user did not ask to add papers: list the candidates in final_answer instead")
     if not ids:
         raise ToolError("ids is empty")
     if len(ids) > MAX_ADD:
@@ -240,6 +283,10 @@ SCHEMAS = [
                     "entity": {
                         "type": "string",
                         "description": "Only passages that mention this method/dataset/metric/task, e.g. 'MT-Bench' or 'EAGLE'.",
+                    },
+                    "paper_ids": {
+                        "type": "array", "items": {"type": "integer"},
+                        "description": "Only passages from these papers (ids from find_papers or earlier results).",
                     },
                 },
                 "required": ["query"],
@@ -307,6 +354,27 @@ SCHEMAS = [
     {
         "type": "function",
         "function": {
+            "name": "find_papers",
+            "description": (
+                "Find papers in the library by author and/or by words from the title or abstract. Use it for questions "
+                "like 'papers by Tri Dao', 'is there a paper about X', 'what did <author> write'. Returns paper ids, "
+                "titles, authors and years, without citable sentences."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "Words from the title or abstract."},
+                    "author": {"type": "string", "description": "Author name or surname, e.g. 'Leviathan' or 'Барсуков'."},
+                    "topic": {"type": "string"},
+                    "year_from": {"type": "integer"},
+                    "year_to": {"type": "integer"},
+                },
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "library_overview",
             "description": "List the topics in the library, or the papers of one topic. Use it when asked what is in the library.",
             "parameters": {
@@ -321,17 +389,18 @@ SCHEMAS = [
             "name": "search_external",
             "description": (
                 "Search OpenAlex and arXiv for new papers that are NOT yet in the library. Use only when the user asks "
-                "to collect or find new papers. Returns candidate ids like arxiv:2402.01528 for add_papers."
+                "to collect or find new papers. For papers written by a person, pass author (the query may be "
+                "omitted). Returns candidate ids like arxiv:2402.01528 for add_papers."
             ),
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "query": {"type": "string"},
+                    "query": {"type": "string", "description": "Topic words; optional when author is given."},
+                    "author": {"type": "string", "description": "Author name, e.g. 'Geoffrey Hinton'."},
                     "limit": {"type": "integer", "description": "Candidates to return, 1-10. Default 8."},
                     "year_from": {"type": "integer"},
                     "language": {"type": "string", "enum": ["en", "ru"]},
                 },
-                "required": ["query"],
             },
         },
     },
@@ -392,6 +461,7 @@ FUNCTIONS: dict[str, Callable] = {
     "search_library": search_library,
     "read_passage": read_passage,
     "library_overview": library_overview,
+    "find_papers": find_papers,
     "list_entities": list_entities,
     "compare_papers": compare_papers,
     "search_external": search_external,
@@ -437,6 +507,6 @@ def available_schemas(ctx: ToolContext) -> list[dict]:
     hidden = set()
     if not ctx.sources:
         hidden.add("search_external")
-    if ctx.add_papers_fn is None:
+    if ctx.add_papers_fn is None or not ctx.allow_add:
         hidden.add("add_papers")
     return [s for s in SCHEMAS if s["function"]["name"] not in hidden]

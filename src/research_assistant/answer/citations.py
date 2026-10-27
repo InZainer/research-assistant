@@ -49,7 +49,8 @@ def load_citations(library: Library, sentence_ids: list[int]) -> dict[int, Citat
     }
 
 
-def format_citation(citation: Citation) -> str:
+def citation_place(citation: Citation) -> str:
+    """Откуда цитата: «Название (год), раздел «…», с. N»."""
     where = [f"{citation.title} ({citation.year})" if citation.year else citation.title]
     if citation.section:
         where.append(f"раздел «{citation.section}»")
@@ -57,4 +58,8 @@ def format_citation(citation: Citation) -> str:
         where.append(f"с. {citation.page}")
     elif citation.source == "metadata":
         where.append("аннотация из метаданных")
-    return f"«{citation.text}» — {', '.join(where)} [s{citation.sentence_id}]"
+    return ", ".join(where)
+
+
+def format_citation(citation: Citation) -> str:
+    return f"«{citation.text}» — {citation_place(citation)} [s{citation.sentence_id}]"

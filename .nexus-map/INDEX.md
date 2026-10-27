@@ -6,7 +6,7 @@
 
 **Что это.** CLI-агент «ассистент исследователя» (курс «Агентный ИИ», MMCS): собирает статьи по теме (OpenAlex, arXiv, страницы CyberLeninka), разбирает PDF/HTML до предложений со страницами, размечает сущности, ищет гибридно (BM25 + bge-m3) и отвечает утверждениями с дословными цитатами по ID предложений. Python 3.12, uv, SQLite, LLM через OpenAI-совместимый API (локально LM Studio, Qwen3.5-4B). 45 модулей пакета, ~5 тыс. строк кода, 16 тестовых файлов (~2 тыс. строк).
 
-**Точка входа:** `src/research_assistant/cli.py` (`research-assistant <команда>`), сборка агента и поиска — `agent/session.py`.
+**Точки входа:** `src/research_assistant/cli.py` (`research-assistant <команда>`), веб — `ui/app.py` (запуск через `research-assistant ui`), сборка агента и поиска — `agent/session.py`.
 
 ## Системы (подробно — arch/systems.md)
 
@@ -19,6 +19,7 @@
 | Поиск | `retrieval/`, `nlp/embed.py` | BM25 + плотный + RRF, перевод запроса, реранкер |
 | Агент | `agent/`, `answer/`, `llm.py` | свой цикл, инструменты, бюджет шагов, prefetch, цитаты по ID |
 | Оценка | `evaluation/`, `eval/` | метрики поиска, разметки, агента (pass@k, Вильсон) |
+| Веб-интерфейс | `ui/` | Streamlit (`research-assistant ui`): вопрос агенту с карточками цитат, поиск, библиотека; добавлен на этапе 8, вне AST-анализа |
 
 Общий фундамент: `nlp/text.py` (анализатор, основы Snowball en/ru), `ingest/models.py` (`PaperRecord`, 18 импортёров), `config.py`, `llm.py`.
 

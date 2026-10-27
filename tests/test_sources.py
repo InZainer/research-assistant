@@ -129,3 +129,47 @@ def test_openalex_source_passes_contact_and_key():
     params = http.calls[0][1]
     assert params["mailto"] == "me@example.org" and params["api_key"] == "k"
     assert "language:ru" in params["filter"]
+
+
+# --- поиск по автору ---
+
+def test_arxiv_author_query():
+    assert build_query(None, author="Geoffrey E. Hinton") == "au:geoffrey AND au:hinton"
+    assert build_query("capsules", author="Hinton") == "au:hinton AND all:capsules"
+
+
+def test_openalex_author_params():
+    params = build_params("", 10, author_ids=["A1", "A2"])
+    assert params["filter"] == "is_oa:true,author.id:A1|A2"
+    assert "search" not in params and params["sort"] == "cited_by_count:desc"  # без запроса — самые цитируемые
+    assert build_params("capsules", 10, author_ids=["A1"])["search"] == "capsules"
+
+
+class RoutedHttp(FakeHttp):
+    """Ответ зависит от адреса: каталог авторов или работы."""
+
+    def __init__(self, routes: dict[str, dict]):
+        super().__init__()
+        self.routes = routes
+
+    def get_text(self, url, params=None, use_cache=True, timeout=None):
+        self.calls.append((url, params))
+        return json.dumps(self.routes[url])
+
+
+def test_openalex_author_search_checks_profile_names():
+    authors = {"results": [
+        {"id": "https://openalex.org/A1", "display_name": "Geoffrey E. Hinton", "works_count": 562},
+        {"id": "https://openalex.org/A2", "display_name": "Yoshua Bengio", "works_count": 1579},  # нечёткий поиск
+        {"id": "https://openalex.org/A3", "display_name": "Hinton Geoffrey", "works_count": 1},
+    ]}
+    http = RoutedHttp({"https://api.openalex.org/authors": authors,
+                       "https://api.openalex.org/works": {"results": openalex_results()[:1]}})
+    source = OpenAlexSource(http)
+    assert source.author_ids("Geoffrey Hinton") == ["A1", "A3"]
+    source.search("", author="Geoffrey Hinton")
+    assert "author.id:A1|A3" in http.calls[-1][1]["filter"]
+
+    http = RoutedHttp({"https://api.openalex.org/authors": {"results": []}})
+    assert OpenAlexSource(http).search("", author="Nobody Atall") == []
+    assert [url for url, _ in http.calls] == ["https://api.openalex.org/authors"]  # работы без автора не ищем

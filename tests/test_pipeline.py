@@ -69,3 +69,27 @@ def test_query_defaults_to_topic_and_params_pass_through():
     with Library(":memory:") as library:
         ingest_topic(library, [source], topic="ML в бизнесе", limit=5, year_to=2024, language="ru")
     assert source.calls == [("ML в бизнесе", 5, None, 2024, "ru")]
+
+
+def test_search_sources_keeps_only_papers_of_the_author():
+    from research_assistant.ingest.models import PaperRecord
+    from research_assistant.ingest.pipeline import search_sources
+
+    class Source:
+        name = "fake"
+
+        def __init__(self):
+            self.kwargs = None
+
+        def search(self, query, limit=20, year_from=None, year_to=None, language=None, author=None):
+            self.kwargs = {"query": query, "author": author}
+            return [PaperRecord(title="Paper about Geoffrey Hinton winning the Nobel prize", sources=["fake"],
+                                authors=["Some Journalist"]),
+                    PaperRecord(title="Layer normalization for recurrent networks", sources=["fake"],
+                                authors=["Jimmy Lei Ba", "Geoffrey E. Hinton"])]
+
+    source = Source()
+    result = search_sources([source], "", author="Geoffrey Hinton")
+    assert source.kwargs == {"query": "", "author": "Geoffrey Hinton"}
+    assert [r.title for r in result.records] == ["Layer normalization for recurrent networks"]
+    assert len(search_sources([Source()], "layer").records) == 2  # без автора не фильтруем

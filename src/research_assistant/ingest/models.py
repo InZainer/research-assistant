@@ -46,6 +46,24 @@ def normalize_title(title: str) -> str:
     return " ".join(re.sub(r"[\W_]+", " ", text).split())
 
 
+def author_words(name: str) -> list[str]:
+    """Слова имени без инициалов из одной буквы: «А. Барсуков» и «Барсуков А.» дают одно и то же."""
+    return [w for w in normalize_title(name).split() if len(w) > 1]
+
+
+def author_matches(authors: list[str], query: str) -> bool:
+    """Все слова запроса — начала слов в имени одного автора: «Dao» и «tri dao» находят «Tri Dao»,
+    «Geoffrey Hinton» находит «Geoffrey E. Hinton»."""
+    words = author_words(query)
+    if not words:
+        return True
+    for author in authors:
+        tokens = normalize_title(author).split()
+        if all(any(t.startswith(w) for t in tokens) for w in words):
+            return True
+    return False
+
+
 def title_key(title: str) -> str | None:
     norm = normalize_title(title)
     return norm if len(norm) >= MIN_TITLE_KEY_LEN else None

@@ -407,6 +407,18 @@ def cmd_chat(settings: Settings, args) -> int:
     return 0
 
 
+def cmd_ui(args) -> int:
+    import subprocess
+    from pathlib import Path
+
+    app = Path(__file__).parent / "ui" / "app.py"
+    command = [sys.executable, "-m", "streamlit", "run", str(app), "--server.port", str(args.port),
+               "--browser.gatherUsageStats", "false"]
+    if args.no_browser:
+        command += ["--server.headless", "true"]
+    return subprocess.call(command)
+
+
 def cmd_eval_entities(settings: Settings, args) -> int:
     import json
     from datetime import datetime
@@ -578,6 +590,10 @@ def main(argv: list[str] | None = None) -> int:
     chat.add_argument("--offline", action="store_true", help="без внешнего поиска и добавления статей")
     chat.add_argument("--memory", type=int, default=3, help="сколько прошлых вопросов и ответов помнить")
 
+    ui = sub.add_parser("ui", help="веб-интерфейс: вопрос агенту, поиск, библиотека (Streamlit)")
+    ui.add_argument("--port", type=int, default=8501)
+    ui.add_argument("--no-browser", action="store_true", help="не открывать браузер")
+
     eval_entities = sub.add_parser("eval-entities", help="оценить извлечение сущностей на золотом наборе")
     eval_entities.add_argument("--file", default="eval/entities_gold.jsonl")
     eval_entities.add_argument("--model", help="чат-модель; по умолчанию MODEL из .env")
@@ -632,6 +648,8 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_ask(settings, args)
     if args.command == "chat":
         return cmd_chat(settings, args)
+    if args.command == "ui":
+        return cmd_ui(args)
     return 1
 
 

@@ -1,4 +1,4 @@
-"""Внешние источники статей. У каждого есть name и search(query, limit, year_from, year_to, language)."""
+"""Внешние источники статей. У каждого есть name и search(query, limit, year_from, year_to, language, author)."""
 
 from typing import Protocol
 
@@ -15,4 +15,5 @@ class Source(Protocol):
         year_from: int | None = None,
         year_to: int | None = None,
         language: str | None = None,
+        author: str | None = None,
     ) -> list[PaperRecord]: ...

@@ -157,7 +157,8 @@ def test_history_and_reasoning_effort_reach_the_model(ctx):
     assert [m["role"] for m in request["messages"]] == ["system", "user", "assistant", "user"]
     assert request["extra_body"] == {"reasoning_effort": "none"}
     assert {t["function"]["name"] for t in request["tools"]} == {
-        "search_library", "read_passage", "library_overview", "list_entities", "compare_papers", "final_answer"}
+        "search_library", "read_passage", "library_overview", "find_papers", "list_entities", "compare_papers",
+        "final_answer"}
 
 
 # --- инструменты ---
@@ -317,3 +318,46 @@ def test_prefetch_keeps_tools(ctx):
     request = client.requests[0]
     assert "search_library" in {t["function"]["name"] for t in request["tools"]}
     assert request["messages"][-1]["role"] == "tool"
+
+
+def test_on_event_sees_the_same_events_as_the_log(ctx, tmp_path):
+    sid = sentence_id(ctx, "Speedup drops")
+    script = [[call("final_answer", {"answer": "ok", "claims": [{"text": "t", "sentence_ids": [f"s{sid}"]}]})]]
+    seen = []
+    log = tmp_path / "run.jsonl"
+    run_agent("why does speedup drop", ctx, model(script), log_path=log, prefetch=True,
+              on_event=lambda event, data: seen.append((event, data.get("name"))))
+    assert seen == [("start", None), ("tool", "search_library"), ("llm", None), ("tool", "final_answer"),
+                    ("finish", None)]
+    assert len(log.read_text(encoding="utf-8").splitlines()) == len(seen)
+
+
+def test_add_papers_only_when_user_asks(ctx):
+    from research_assistant.agent.tools import wants_to_add
+
+    assert wants_to_add("Добавь эти статьи в библиотеку") and wants_to_add("please add papers by Hinton")
+    assert wants_to_add("скачай статьи Хинтона")
+    assert not wants_to_add("Найди в интернете новые статьи Geoffrey Hinton")
+    assert not wants_to_add("additional results on address translation")  # «add» только целым словом
+
+    record = PaperRecord(title="New paper on drafting", sources=["arxiv"], arxiv_id="2501.00001", year=2025,
+                         authors=["Geoffrey Hinton"])
+    ctx.sources = [SimpleNamespace(name="arxiv", search=lambda *a, **k: [record])]
+    added = []
+    ctx.add_papers_fn = lambda records, topic: added.append(records) or "Added 1"
+    script = [
+        [call("search_external", {"author": "Hinton"})],
+        [call("add_papers", {"ids": ["arxiv:2501.00001"], "topic": "t"})],  # модель пытается добавить сама
+        [call("final_answer", {"answer": "Нашёл одну статью.", "claims": [], "not_found": True})],
+    ]
+    client = ScriptedClient(script)
+    result = run_agent("Найди новые статьи Hinton", ctx, ChatModel("fake", client=client))
+    assert added == [] and result.tool_errors == 1 and result.stop_reason == "final_answer"
+    assert "add_papers" not in {t["function"]["name"] for t in client.requests[0]["tools"]}
+    assert "arxiv:2501.00001" in ctx.candidates  # найденное остаётся у вызывающего: интерфейс предложит добавить
+
+    run_agent("Добавь статью arxiv:2501.00001", ctx, model([
+        [call("add_papers", {"ids": ["arxiv:2501.00001"], "topic": "t"})],
+        [call("final_answer", {"answer": "Добавил.", "claims": [], "not_found": True})],
+    ]))
+    assert len(added) == 1

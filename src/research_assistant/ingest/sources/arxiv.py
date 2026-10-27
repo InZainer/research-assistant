@@ -11,7 +11,7 @@ import re
 import xml.etree.ElementTree as ET
 
 from research_assistant.ingest.http import FetchError, HttpClient
-from research_assistant.ingest.models import PaperRecord, normalize_arxiv_id
+from research_assistant.ingest.models import PaperRecord, author_words, normalize_arxiv_id
 
 API_URL = "https://export.arxiv.org/api/query"
 API_HOST = "export.arxiv.org"
@@ -21,10 +21,12 @@ TIMEOUT = 20
 NS = {"a": "http://www.w3.org/2005/Atom", "arxiv": "http://arxiv.org/schemas/atom"}
 
 
-def build_query(query: str, year_from: int | None = None, year_to: int | None = None) -> str:
-    """Слова через AND по всем полям; фраза в кавычках ищется целиком."""
-    parts = []
-    for token in re.findall(r'"[^"]+"|\S+', query):
+def build_query(query: str | None, year_from: int | None = None, year_to: int | None = None,
+                author: str | None = None) -> str:
+    """Слова через AND по всем полям; фраза в кавычках ищется целиком. author — слова имени в поле автора
+    (au:), инициалы из одной буквы пропускаются: arXiv пишет имена по-разному."""
+    parts = [f"au:{word}" for word in author_words(author or "")]
+    for token in re.findall(r'"[^"]+"|\S+', query or ""):
         phrase = token.startswith('"')
         text = re.sub(r'[():\[\]"]', " ", token).strip()
         if not text:
@@ -92,11 +94,12 @@ class ArxivSource:
         year_from: int | None = None,
         year_to: int | None = None,
         language: str | None = None,
+        author: str | None = None,
     ) -> list[PaperRecord]:
         if language not in (None, "en"):
             return []  # arXiv почти целиком англоязычный и не фильтрует по языку
         params = {
-            "search_query": build_query(query, year_from, year_to),
+            "search_query": build_query(query, year_from, year_to, author),
             "start": 0,
             "max_results": limit,
             "sortBy": "relevance",

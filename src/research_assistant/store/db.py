@@ -591,6 +591,33 @@ class Library:
             (" ".join(topic.split()), limit),
         ).fetchall()
 
+    def papers_where(self, topic: str | None = None, year_from: int | None = None, year_to: int | None = None,
+                     language: str | None = None) -> list[sqlite3.Row]:
+        """Статьи по теме, годам и языку — кандидаты для поиска статей (retrieval/papers.py)."""
+        conditions, params = [], []
+        if topic:
+            conditions.append(
+                "id IN (SELECT pt.paper_id FROM paper_topics pt JOIN topics t ON t.id = pt.topic_id WHERE t.name = ?)"
+            )
+            params.append(" ".join(topic.split()))
+        if year_from:
+            conditions.append("year >= ?")
+            params.append(year_from)
+        if year_to:
+            conditions.append("year <= ?")
+            params.append(year_to)
+        if language:
+            conditions.append("language = ?")
+            params.append(language)
+        where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+        return self.conn.execute(f"SELECT * FROM papers {where} ORDER BY year DESC, id", params).fetchall()
+
+    def paper_topics(self, paper_id: int) -> list[str]:
+        rows = self.conn.execute(
+            """SELECT t.name FROM topics t JOIN paper_topics pt ON pt.topic_id = t.id
+               WHERE pt.paper_id = ? ORDER BY t.id""", (paper_id,))
+        return [r["name"] for r in rows]
+
 
 def _fts_columns(text: str, section: str | None, title: str | None) -> tuple[str, str, str]:
     return " ".join(analyze(text)), " ".join(analyze(section or "")), " ".join(analyze(title or ""))

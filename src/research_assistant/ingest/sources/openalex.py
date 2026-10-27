@@ -7,9 +7,10 @@
 import re
 
 from research_assistant.ingest.http import HttpClient
-from research_assistant.ingest.models import PaperRecord, normalize_arxiv_id
+from research_assistant.ingest.models import PaperRecord, author_matches, normalize_arxiv_id
 
 API_URL = "https://api.openalex.org/works"
+AUTHORS_URL = "https://api.openalex.org/authors"
 API_HOST = "api.openalex.org"
 MIN_INTERVAL = 0.2
 SELECT = (
@@ -17,6 +18,8 @@ SELECT = (
     "abstract_inverted_index,primary_location,best_oa_location,locations"
 )
 MAX_PER_PAGE = 200
+# Один человек в OpenAlex часто разбит на несколько профилей («Geoffrey E. Hinton», «Hinton Geoffrey»).
+MAX_AUTHOR_PROFILES = 5
 
 
 def build_params(
@@ -25,9 +28,13 @@ def build_params(
     year_from: int | None = None,
     year_to: int | None = None,
     language: str | None = None,
+    author_ids: list[str] | None = None,
 ) -> dict:
-    """Только статьи в открытом доступе: без полного текста они проекту не нужны."""
+    """Только статьи в открытом доступе: без полного текста они проекту не нужны.
+    С author_ids — работы этих профилей авторов; без запроса они сортируются по цитированиям."""
     filters = ["is_oa:true"]
+    if author_ids:
+        filters.append("author.id:" + "|".join(author_ids))
     if year_from and year_to:
         filters.append(f"publication_year:{year_from}-{year_to}")
     elif year_from:
@@ -36,7 +43,12 @@ def build_params(
         filters.append(f"publication_year:<{year_to + 1}")
     if language:
         filters.append(f"language:{language}")
-    return {"search": query, "filter": ",".join(filters), "per_page": min(limit, MAX_PER_PAGE), "select": SELECT}
+    params = {"filter": ",".join(filters), "per_page": min(limit, MAX_PER_PAGE), "select": SELECT}
+    if query and query.strip():
+        params["search"] = query
+    else:
+        params["sort"] = "cited_by_count:desc"
+    return params
 
 
 def rebuild_abstract(inverted: dict[str, list[int]] | None) -> str | None:
@@ -94,11 +106,29 @@ class OpenAlexSource:
         year_from: int | None = None,
         year_to: int | None = None,
         language: str | None = None,
+        author: str | None = None,
     ) -> list[PaperRecord]:
-        params = build_params(query, limit, year_from, year_to, language)
+        author_ids = None
+        if author and author.strip():
+            author_ids = self.author_ids(author)
+            if not author_ids:
+                return []
+        params = self._auth(build_params(query, limit, year_from, year_to, language, author_ids))
+        data = self.http.get_json(API_URL, params)
+        return [r for r in (parse_work(w) for w in data.get("results", [])) if r is not None]
+
+    def author_ids(self, name: str) -> list[str]:
+        """Профили авторов OpenAlex с этим именем. Поиск авторов нечёткий («Geoffrey Hinton» находит и Yoshua
+        Bengio), поэтому имя профиля сверяется с запросом."""
+        params = self._auth({"search": name, "per_page": 25, "select": "id,display_name,works_count"})
+        data = self.http.get_json(AUTHORS_URL, params)
+        profiles = [a for a in data.get("results", []) if author_matches([a.get("display_name") or ""], name)]
+        profiles.sort(key=lambda a: -(a.get("works_count") or 0))
+        return [a["id"].rsplit("/", 1)[-1] for a in profiles[:MAX_AUTHOR_PROFILES] if a.get("id")]
+
+    def _auth(self, params: dict) -> dict:
         if self.mailto:
             params["mailto"] = self.mailto
         if self.api_key:
             params["api_key"] = self.api_key
-        data = self.http.get_json(API_URL, params)
-        return [r for r in (parse_work(w) for w in data.get("results", [])) if r is not None]
+        return params
