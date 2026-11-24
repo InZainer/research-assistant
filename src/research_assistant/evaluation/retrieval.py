@@ -7,7 +7,7 @@
 import json
 import math
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from research_assistant.ingest.models import normalize_title
@@ -29,6 +29,9 @@ class GoldQuestion:
     relevant: list[GoldItem]
     topic: str | None = None
     status: str = "draft"  # draft — набросок, verified — проверен человеком
+    # fact | entity | compare | paper_lookup | unanswerable (relevant пуст) | followup | external (docs/finetune.md)
+    kind: str = "fact"
+    meta: dict = field(default_factory=dict)  # сплит, источник, история диалога для followup и т. п.
 
 
 def load_questions(path: str | Path) -> list[GoldQuestion]:
@@ -76,7 +79,9 @@ def ndcg_at_k(ranked: list[int], relevant: set[int], k: int) -> float:
 
 
 def question_group(question: GoldQuestion) -> str:
-    """«язык вопроса→язык статьи»: en→en, ru→en (межъязыковой поиск), ru→ru."""
+    """«язык вопроса→язык статьи»: en→en, ru→en (межъязыковой поиск), ru→ru; без золота — ru→none, en→none."""
+    if not question.relevant:
+        return f"{question.language}→none"
     return f"{question.language}→{detect_language(question.relevant[0].quote)}"
 
 

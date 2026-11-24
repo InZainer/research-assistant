@@ -1,0 +1,27 @@
+# Общие слова темы «общепит» для сбора с фильтром по стране авторов (ingest --country RU).
+# Тематику (ИИ или маркетинг) задаёт фильтр --require, поэтому запросы здесь широкие.
+public catering
+public catering enterprises
+catering industry
+restaurant business
+restaurant industry
+restaurant services
+restaurant market
+food service
+fast food
+food delivery
+cafe
+coffee shop
+hospitality industry restaurant
+HoReCa
+общественное питание
+общественного питания
+предприятия общественного питания
+ресторанный бизнес
+ресторанного бизнеса
+ресторан
+рестораны
+кафе
+общепит
+доставка еды
+индустрия гостеприимства

@@ -25,6 +25,10 @@ TRANSLATE_SYSTEM = (
     "Translate the user's question into a short English search query for scientific papers. "
     "Keep technical terms and model names. Output only the query, nothing else."
 )
+TRANSLATE_TO_RUSSIAN = (
+    "Translate the user's question into a short Russian search query for scientific papers. "
+    "Keep model names and abbreviations as they are. Output only the query, nothing else."
+)
 PASSAGE_CHARS = 500
 
 
@@ -82,15 +86,25 @@ class QueryTranslator:
         """Перевод для BM25 по английским статьям; для английского запроса — None (переводить нечего)."""
         if detect_language(query) == "en":
             return None
-        if query not in self.cache:
+        return self._translate(query, TRANSLATE_SYSTEM, "en")
+
+    def to_russian(self, query: str) -> str | None:
+        """Перевод английского запроса для BM25 по русским статьям; для русского запроса — None."""
+        if detect_language(query) != "en":
+            return None
+        return self._translate(query, TRANSLATE_TO_RUSSIAN, "ru")
+
+    def _translate(self, query: str, system: str, target: str) -> str | None:
+        key = query if target == "en" else f"{target}:{query}"
+        if key not in self.cache:
             try:
-                response = _complete(self.model, [{"role": "system", "content": TRANSLATE_SYSTEM},
+                response = _complete(self.model, [{"role": "system", "content": system},
                                                   {"role": "user", "content": query}], max_tokens=100)
                 if response.usage:
                     self.tokens += response.usage.prompt_tokens + response.usage.completion_tokens
                 text = re.sub(r"<think>.*?</think>", "", response.choices[0].message.content or "", flags=re.S)
                 lines = [line.strip().strip('"') for line in text.strip().splitlines() if line.strip()]
-                self.cache[query] = lines[0] if lines else ""
+                self.cache[key] = lines[0] if lines else ""
             except Exception:
-                self.cache[query] = ""
-        return self.cache[query] or None
+                self.cache[key] = ""
+        return self.cache[key] or None

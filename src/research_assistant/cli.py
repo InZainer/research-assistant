@@ -3,6 +3,7 @@
 import argparse
 from pathlib import Path
 import json
+import os
 import sys
 
 from research_assistant.config import Settings, load_settings
@@ -48,6 +49,23 @@ def evaluate_check(response) -> dict:
     }
 
 
+def cmd_providers(settings: Settings) -> int:
+    from research_assistant.providers import describe_all
+
+    print(f"Активный: {settings.provider or 'не выбран (переменные OPENAI_BASE_URL, OPENAI_API_KEY, MODEL)'}"
+          f" — выбирается LLM_PROVIDER в .env или флагом --provider")
+    for row in describe_all():
+        mark = "*" if row["active"] else " "
+        print(f"{mark} {row['name']:<10} {row['title']}")
+        print(f"    адрес: {row['base_url']}")
+        print(f"    модель: {row['model']}")
+        print(f"    ключ: {row['key']}")
+        if row["note"]:
+            print(f"    {row['note']}")
+    print(f"Эмбеддинги: {settings.embed_model or 'нет (только BM25)'} — {settings.embed_base_url}")
+    return 0
+
+
 def cmd_check(settings: Settings) -> int:
     missing = settings.missing_llm_vars()
     if missing:
@@ -56,15 +74,23 @@ def cmd_check(settings: Settings) -> int:
 
     from openai import OpenAI
 
-    client = OpenAI(base_url=settings.base_url, api_key=settings.api_key)
-    response = client.chat.completions.create(
-        model=settings.model,
-        messages=[{"role": "user", "content": CHECK_PROMPT}],
-        tools=[CHECK_TOOL],
-    )
+    client = OpenAI(base_url=settings.base_url, api_key=settings.api_key, max_retries=1)
+    try:
+        response = client.chat.completions.create(
+            model=settings.model,
+            messages=[{"role": "user", "content": CHECK_PROMPT}],
+            tools=[CHECK_TOOL],
+        )
+    except Exception as error:  # сервер не запущен, неверный ключ или модель — объяснить, а не падать
+        from research_assistant.ui.views import friendly_error
+
+        print(f"Провайдер: {settings.provider or '— (OPENAI_*)'}, сервис: {settings.base_url}, модель: {settings.model}")
+        print(friendly_error(error, settings.base_url, settings.model))
+        return 1
     result = evaluate_check(response)
 
-    print(f"Сервис: {settings.base_url or 'api.openai.com'}, модель: {settings.model}")
+    print(f"Провайдер: {settings.provider or '— (OPENAI_*)'}, сервис: {settings.base_url or 'api.openai.com'}, "
+          f"модель: {settings.model}")
     print(f"Вызов инструмента: {'да' if result['tool_calls'] else 'НЕТ'} {result['tool_args'] or ''}")
     print(f"Счётчики usage:    {'да' if result['usage'] else 'НЕТ'} "
           f"(prompt={result['prompt_tokens']}, completion={result['completion_tokens']})")
@@ -74,21 +100,35 @@ def cmd_check(settings: Settings) -> int:
 SOURCE_NAMES = ("arxiv", "openalex")
 
 
-def build_sources(names: list[str], http, settings: Settings) -> list:
+def build_sources(names: list[str], http, settings: Settings, include_closed: bool = False,
+                  country: str | None = None) -> list:
     from research_assistant.ingest.sources.arxiv import ArxivSource
     from research_assistant.ingest.sources.openalex import OpenAlexSource
 
     factories = {
         "arxiv": lambda: ArxivSource(http),
-        "openalex": lambda: OpenAlexSource(http, mailto=settings.contact_email, api_key=settings.openalex_api_key),
+        "openalex": lambda: OpenAlexSource(http, mailto=settings.contact_email, api_key=settings.openalex_api_key,
+                                           open_access_only=not include_closed, country=country),
     }
     return [factories[name]() for name in names]
+
+
+def read_lines(path: str) -> list[str]:
+    """Строки файла со списком (запросы, ссылки): пустые и начинающиеся с # пропускаются."""
+    lines = (line.strip() for line in Path(path).read_text(encoding="utf-8").splitlines())
+    return [line for line in lines if line and not line.startswith("#")]
+
+
+# Массовый сбор ходит по сотням сайтов журналов: мёртвый хост не должен держать его по три минуты на повторах.
+BULK_BACKOFF = (5,)
+BULK_TIMEOUT = 30
 
 
 def cmd_ingest(settings: Settings, args) -> int:
     from research_assistant.ingest.download import FulltextFetcher
     from research_assistant.ingest.http import HttpClient
     from research_assistant.ingest.pipeline import ingest_topic
+    from research_assistant.ingest.relevance import TermFilter
     from research_assistant.ingest.robots import RobotsPolicy
     from research_assistant.store.db import Library
 
@@ -98,7 +138,13 @@ def cmd_ingest(settings: Settings, args) -> int:
         print(f"Неизвестные источники: {', '.join(unknown) or '(пусто)'}. Доступны: {', '.join(SOURCE_NAMES)}")
         return 2
 
-    http = HttpClient(settings.user_agent, cache_dir=None if args.refresh else settings.http_cache_dir)
+    try:
+        queries = list(args.query or []) + (read_lines(args.queries_file) if args.queries_file else [])
+    except OSError as error:
+        print(f"Не удалось прочитать файл запросов: {error}")
+        return 2
+    http = HttpClient(settings.user_agent, cache_dir=None if args.refresh else settings.http_cache_dir,
+                      backoff=BULK_BACKOFF, timeout=BULK_TIMEOUT)
     fetcher = None
     parsed = None
     if not args.no_fulltext:
@@ -107,9 +153,11 @@ def cmd_ingest(settings: Settings, args) -> int:
         with Library(settings.db_path) as library:
             report = ingest_topic(
                 library,
-                build_sources(names, http, settings),
+                build_sources(names, http, settings, include_closed=args.include_closed, country=args.country),
                 topic=args.topic,
-                query=args.query,
+                queries=queries or None,
+                relevance=TermFilter.parse(args.require),
+                workers=args.workers,
                 limit=args.limit,
                 year_from=args.year_from,
                 year_to=args.year_to,
@@ -137,12 +185,62 @@ def cmd_ingest(settings: Settings, args) -> int:
         http.close()
 
     print(f"\nТема «{report.topic}», запрос «{report.query}»")
-    print(f"Уникальных статей: {report.unique}; новых: {report.added}; уже были в библиотеке: {report.already_in_library}")
+    print(f"Уникальных статей: {report.unique}; новых: {report.added}; уже были в библиотеке: {report.already_in_library}"
+          + (f"; отброшено не по теме: {report.off_topic}" if report.off_topic else ""))
     if report.fulltext:
         print("Полные тексты: " + ", ".join(f"{k} {v}" for k, v in sorted(report.fulltext.items())))
     if not args.no_parse and parsed:
         print("Разбор: " + ", ".join(f"{k} {v}" for k, v in sorted(parsed.items())))
+    if any("лимит запросов исчерпан" in error for error in report.errors.values()):
+        print("Источник исчерпал лимит запросов. У OpenAlex без ключа бесплатный дневной лимит общий на IP и "
+              "сбрасывается в полночь UTC; с бесплатным ключом (OPENALEX_API_KEY в .env) он больше. "
+              "Повторите ту же команду позже: уже найденное не потеряется.")
     return 1 if report.errors and not report.found else 0
+
+
+def cmd_add(settings: Settings, args) -> int:
+    from functools import partial
+
+    from research_assistant.ingest.download import FulltextFetcher
+    from research_assistant.ingest.http import HttpClient
+    from research_assistant.ingest.pipeline import add_references
+    from research_assistant.ingest.resolve import resolve_reference
+    from research_assistant.ingest.robots import RobotsPolicy
+    from research_assistant.ingest.sources.openalex import OpenAlexSource
+    from research_assistant.parse.pipeline import parse_papers
+    from research_assistant.store.db import Library
+
+    try:
+        references = list(args.reference) + (read_lines(args.file) if args.file else [])
+    except OSError as error:
+        print(f"Не удалось прочитать файл ссылок: {error}")
+        return 2
+    if not references:
+        print("Нет ссылок: укажите DOI, идентификатор arXiv или адрес страницы статьи (или --file).")
+        return 2
+    http = HttpClient(settings.user_agent, cache_dir=settings.http_cache_dir, backoff=BULK_BACKOFF,
+                      timeout=BULK_TIMEOUT)
+    robots = RobotsPolicy(http)
+    openalex = OpenAlexSource(http, mailto=settings.contact_email, api_key=settings.openalex_api_key,
+                              open_access_only=False)
+    try:
+        with Library(settings.db_path) as library:
+            report = add_references(
+                library, references, args.topic,
+                resolve=partial(resolve_reference, http=http, robots=robots, openalex=openalex),
+                fetcher=None if args.no_fulltext else FulltextFetcher(http, robots, settings.fulltext_dir),
+                log=print,
+            )
+            parsed = parse_papers(library, paper_ids=report.paper_ids, log=print) if report.paper_ids else None
+    finally:
+        http.close()
+    print(f"\nТема «{report.topic}»: добавлено {report.added}, уже были {report.already_in_library}, "
+          f"не удалось {len(report.errors)}")
+    if report.fulltext:
+        print("Полные тексты: " + ", ".join(f"{k} {v}" for k, v in sorted(report.fulltext.items())))
+    if parsed:
+        print("Разбор: " + ", ".join(f"{k} {v}" for k, v in sorted(parsed.items())))
+    return 1 if report.errors and not report.unique else 0
 
 
 def cmd_parse(settings: Settings, args) -> int:
@@ -319,26 +417,30 @@ def cmd_eval_retrieval(settings: Settings, args) -> int:
     return 0
 
 
-def print_agent_result(result) -> None:
+def format_agent_result(result) -> str:
+    """Ответ агента с цитатами текстом: для терминала и для MCP-инструмента ask_agent."""
     from research_assistant.answer.citations import format_citation
 
-    print()
+    lines = []
     if result.stop_reason != "final_answer":
         reason = {"max_steps": "исчерпан лимит шагов", "no_final_answer": "модель не оформила ответ с цитатами"}
-        print(f"[!] {reason.get(result.stop_reason, result.stop_reason)} — ответ без проверенных цитат.")
-    print(result.answer or "(пустой ответ)")
+        lines.append(f"[!] {reason.get(result.stop_reason, result.stop_reason)} — ответ без проверенных цитат.")
+    lines.append(result.answer or "(пустой ответ)")
     if result.not_found:
-        print("В библиотеке не нашлось подтверждающих фрагментов.")
+        lines.append("В библиотеке не нашлось подтверждающих фрагментов.")
     for number, claim in enumerate(result.claims, 1):
-        print()
-        print(f"{number}. {claim.text}")
-        for citation in claim.citations:
-            print(f"   {format_citation(citation)}")
+        lines += ["", f"{number}. {claim.text}"]
+        lines += [f"   {format_citation(citation)}" for citation in claim.citations]
     usage = result.usage
+    lines += ["", f"Шагов {result.steps}, вызовов инструментов {result.tool_calls} (ошибок {result.tool_errors}), "
+                  f"токенов {usage.total} (prompt {usage.prompt_tokens}, completion {usage.completion_tokens}), "
+                  f"{result.seconds:.1f} с. Журнал: {result.log_path}"]
+    return "\n".join(lines)
+
+
+def print_agent_result(result) -> None:
     print()
-    print(f"Шагов {result.steps}, вызовов инструментов {result.tool_calls} (ошибок {result.tool_errors}), "
-          f"токенов {usage.total} (prompt {usage.prompt_tokens}, completion {usage.completion_tokens}), "
-          f"{result.seconds:.1f} с. Журнал: {result.log_path}")
+    print(format_agent_result(result))
 
 
 def _agent_or_error(settings: Settings, library, external: bool):
@@ -355,6 +457,7 @@ def cmd_ask(settings: Settings, args) -> int:
     from datetime import datetime
 
     from research_assistant.agent.loop import run_agent
+    from research_assistant.agent.session import run_options
     from research_assistant.store.db import Library
 
     with Library(settings.db_path) as library:
@@ -365,8 +468,8 @@ def cmd_ask(settings: Settings, args) -> int:
         log_path = settings.runs_dir / f"ask-{datetime.now():%Y%m%d-%H%M%S}.jsonl"
         try:
             # prefetch: поиск по самому вопросу заранее — лучший вариант в эксперименте E3 (docs/experiments.md)
-            result = run_agent(args.question, ctx, model, max_steps=settings.max_steps, log_path=log_path,
-                               prefetch=True)
+            result = run_agent(args.question, ctx, model, log_path=log_path, prefetch=True,
+                               **run_options(settings))
         finally:
             http.close()
     print_agent_result(result)
@@ -377,6 +480,7 @@ def cmd_chat(settings: Settings, args) -> int:
     from datetime import datetime
 
     from research_assistant.agent.loop import run_agent
+    from research_assistant.agent.session import run_options
     from research_assistant.store.db import Library
 
     with Library(settings.db_path) as library:
@@ -396,14 +500,76 @@ def cmd_chat(settings: Settings, args) -> int:
                 if not question or question in ("/exit", "/quit", "выход"):
                     break
                 ctx.seen_sentences.clear()  # цитировать можно только то, что найдено для этого вопроса
-                result = run_agent(question, ctx, model, max_steps=settings.max_steps, history=history,
-                                   log_path=log_path, prefetch=True)
+                result = run_agent(question, ctx, model, history=history, log_path=log_path, prefetch=True,
+                                   **run_options(settings))
                 print_agent_result(result)
                 # В историю идут только вопрос и итоговый ответ: выдача инструментов прошлых шагов не раздувает контекст.
                 history += [{"role": "user", "content": question}, {"role": "assistant", "content": result.answer}]
                 history = history[-2 * args.memory:]
         finally:
             http.close()
+    return 0
+
+
+def _chat_model(settings: Settings, max_tokens: int = 4096):
+    """Чат-модель для команд read и coverage; None (с сообщением), если она не настроена."""
+    missing = settings.missing_llm_vars()
+    if missing:
+        print(f"Не заданы переменные: {', '.join(missing)}. Заполните .env по образцу .env.example.")
+        return None
+    from research_assistant.llm import ChatModel
+
+    return ChatModel(settings.model, settings.base_url, settings.api_key,
+                     reasoning_effort=settings.reasoning_effort, max_tokens=max_tokens)
+
+
+def cmd_read(settings: Settings, args) -> int:
+    from datetime import datetime
+
+    from research_assistant.agent.reading import format_reading, read_paper
+    from research_assistant.store.db import Library
+
+    model = _chat_model(settings)
+    if model is None:
+        return 2
+    code = 0
+    with Library(settings.db_path) as library:
+        for paper_id in args.paper_id:
+            if library.get_paper(paper_id) is None:
+                print(f"Статьи #{paper_id} нет.")
+                code = 2
+                continue
+            log_path = settings.runs_dir / f"read-{paper_id}-{datetime.now():%Y%m%d-%H%M%S}.jsonl"
+            reading = read_paper(library, model, paper_id, question=args.question, aspects=args.aspect,
+                                 window_chars=args.window or settings.read_window_chars, log_path=log_path)
+            print(format_reading(reading))
+            print()
+            if reading.stop_reason != "report":
+                code = code or 1
+    return code
+
+
+def cmd_coverage(settings: Settings, args) -> int:
+    from datetime import datetime
+
+    from research_assistant.agent.coverage import check_coverage, format_coverage
+    from research_assistant.agent.session import make_searcher
+    from research_assistant.retrieval.rerank import QueryTranslator
+    from research_assistant.store.db import Library
+
+    model = _chat_model(settings, max_tokens=1024)
+    if model is None:
+        return 2
+    with Library(settings.db_path) as library:
+        if _topic_id(library, args.topic) is False:
+            return 2
+        searcher = make_searcher(settings, library)
+        searcher.translator = QueryTranslator(model)
+        log_path = settings.runs_dir / f"coverage-{datetime.now():%Y%m%d-%H%M%S}.jsonl"
+        report = check_coverage(library, searcher, model, args.aspect, topic=args.topic, paper_ids=args.paper,
+                                limit=args.limit, expand=not args.no_expand, log_path=log_path, progress=print)
+    print()
+    print(format_coverage(report))
     return 0
 
 
@@ -505,6 +671,14 @@ def cmd_eval_agent(settings: Settings, args) -> int:
     if settings.missing_llm_vars():
         print("Не задана модель: заполните MODEL и OPENAI_API_KEY в .env.")
         return 2
+    # Отклонённые кандидаты синтетических наборов (data/finetune/questions) не оцениваем.
+    questions = [q for q in questions if q.meta.get("accepted", True) is not False]
+    # Вопросам external нужен поиск в интернете; остальным его не даём, как в обучающих траекториях.
+    skipped = sum((q.kind == "external") != args.external for q in questions)
+    questions = [q for q in questions if (q.kind == "external") == args.external]
+    if skipped:
+        print(f"Пропущено вопросов {'не ' if args.external else ''}типа external: {skipped}"
+              + ("" if args.external else " (их оценивает --external)"))
     if args.only:
         questions = [q for q in questions if any(q.id.startswith(prefix) for prefix in args.only.split(","))]
     if args.limit:
@@ -514,8 +688,9 @@ def cmd_eval_agent(settings: Settings, args) -> int:
         http.close()
 
         def fresh_context():
-            ctx, _, client = make_agent(settings, library, external=False)
-            client.close()
+            ctx, _, client = make_agent(settings, library, external=args.external)
+            if not args.external:
+                client.close()
             return ctx
 
         report = evaluate_agent(fresh_context, model, questions, variant=args.variant, runs=args.runs,
@@ -530,22 +705,45 @@ def cmd_eval_agent(settings: Settings, args) -> int:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="research-assistant", description="Ассистент исследователя")
+    parser.add_argument("--provider", help="AI-сервис для чат-модели: lmstudio, inception, openai, anthropic, "
+                                           "openrouter, ollama, deepseek, gemini, custom (см. команду providers)")
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("check", help="проверить, что модель вызывает инструменты и отдаёт usage")
+    sub.add_parser("providers", help="профили AI-сервисов: адрес, модель, есть ли ключ (значения не печатаются)")
 
     ingest = sub.add_parser("ingest", help="найти статьи по теме и добавить в библиотеку")
     ingest.add_argument("topic", help="название темы в библиотеке")
-    ingest.add_argument("--query", help="поисковый запрос, если отличается от названия темы")
+    ingest.add_argument("--query", action="append",
+                        help="поисковый запрос, если отличается от названия темы; можно несколько раз — "
+                             "синонимы и варианты на русском и английском складываются в одну тему")
+    ingest.add_argument("--queries-file", help="файл с запросами, по одному в строке (# — комментарий)")
     ingest.add_argument("--sources", default=",".join(SOURCE_NAMES), help="через запятую: arxiv,openalex")
-    ingest.add_argument("--limit", type=int, default=20, help="сколько статей брать из каждого источника")
+    ingest.add_argument("--limit", type=int, default=20,
+                        help="сколько статей брать из каждого источника на каждый запрос (OpenAlex — до 2000)")
+    ingest.add_argument("--require", action="append",
+                        help="группа слов темы через «|»: хотя бы одно должно быть в названии или аннотации; "
+                             "флаг можно повторить — тогда нужны слова из каждой группы "
+                             "(--require \"ресторан|кафе|restaurant\" --require \"нейросеть|machine learning\")")
+    ingest.add_argument("--country", help="код страны организаций авторов для OpenAlex, например RU: работы "
+                                          "российских авторов находятся и по английским запросам")
+    ingest.add_argument("--include-closed", action="store_true",
+                        help="брать из OpenAlex и статьи без открытого доступа: в библиотеку попадёт аннотация")
     ingest.add_argument("--year-from", type=int)
     ingest.add_argument("--year-to", type=int)
     ingest.add_argument("--language", help="код языка, например ru (arXiv при этом пропускается)")
     ingest.add_argument("--no-fulltext", action="store_true", help="не скачивать полные тексты")
+    ingest.add_argument("--workers", type=int, default=6,
+                        help="потоков скачивания полных текстов; один сайт всегда качает один поток")
     ingest.add_argument("--retry-failed", action="store_true", help="повторить неудачные скачивания")
     ingest.add_argument("--refresh", action="store_true", help="не брать ответы источников из кэша")
     ingest.add_argument("--no-parse", action="store_true", help="не разбирать полные тексты после скачивания")
     ingest.add_argument("--annotate", action="store_true", help="разметить новые статьи моделью из .env")
+
+    add = sub.add_parser("add", help="добавить статьи по DOI, идентификатору arXiv или адресу страницы")
+    add.add_argument("reference", nargs="*", help="DOI, arXiv id или адрес страницы статьи (например, CyberLeninka)")
+    add.add_argument("--topic", required=True, help="тема библиотеки, в которую добавить")
+    add.add_argument("--file", help="файл со ссылками, по одной в строке (# — комментарий)")
+    add.add_argument("--no-fulltext", action="store_true", help="не скачивать полные тексты")
 
     parse = sub.add_parser("parse", help="разобрать полные тексты на разделы, фрагменты и предложения")
     parse.add_argument("--topic", help="только статьи темы")
@@ -590,9 +788,31 @@ def main(argv: list[str] | None = None) -> int:
     chat.add_argument("--offline", action="store_true", help="без внешнего поиска и добавления статей")
     chat.add_argument("--memory", type=int, default=3, help="сколько прошлых вопросов и ответов помнить")
 
+    read = sub.add_parser("read", help="прочитать статью целиком: что в ней есть, чего нет, расхождения")
+    read.add_argument("paper_id", type=int, nargs="+", help="id статьи (можно несколько)")
+    read.add_argument("--question", help="вопрос к статье; без него — общий отчёт о прочтении")
+    read.add_argument("--aspect", action="append",
+                      help="что проверить в статье (можно несколько раз): по каждому — есть с цитатой или нет")
+    read.add_argument("--window", type=int, help="символов текста на один вызов модели (по умолчанию из настроек)")
+
+    coverage = sub.add_parser("coverage", help="проверить по каждой статье темы, рассмотрен ли в ней аспект")
+    coverage.add_argument("aspect", help="что ищем, например «расстановка мебели в непрямоугольном зале»")
+    coverage.add_argument("--topic", help="тема библиотеки; без неё — вся библиотека")
+    coverage.add_argument("--paper", type=int, action="append", help="только эти статьи (можно несколько раз)")
+    coverage.add_argument("--limit", type=int, default=60, help="сколько самых близких статей проверить моделью")
+    coverage.add_argument("--no-expand", action="store_true", help="не переформулировать аспект моделью")
+
     ui = sub.add_parser("ui", help="веб-интерфейс: вопрос агенту, поиск, библиотека (Streamlit)")
     ui.add_argument("--port", type=int, default=8501)
     ui.add_argument("--no-browser", action="store_true", help="не открывать браузер")
+
+    mcp = sub.add_parser("mcp", help="MCP-сервер (stdio) для внешних агентов: Claude Code, Hermes, Codex, Cursor")
+    mcp.add_argument("--project-dir", help="папка проекта с .env и data/; по умолчанию текущая или папка установки")
+    mcp.add_argument("--allow-model", action="store_true",
+                     help="добавить ask_agent, read_paper, check_coverage: вызывают модель из .env и тратят ключ")
+    mcp.add_argument("--allow-write", action="store_true",
+                     help="добавить search_external и add_papers: поиск в интернете и пополнение библиотеки")
+    mcp.add_argument("--no-log", action="store_true", help="не писать журнал вызовов runs/mcp-*.jsonl")
 
     eval_entities = sub.add_parser("eval-entities", help="оценить извлечение сущностей на золотом наборе")
     eval_entities.add_argument("--file", default="eval/entities_gold.jsonl")
@@ -617,13 +837,39 @@ def main(argv: list[str] | None = None) -> int:
     eval_agent.add_argument("--only", help="префиксы id вопросов через запятую, например en,xl")
     eval_agent.add_argument("--limit", type=int, help="первые N вопросов")
     eval_agent.add_argument("--rescore", help="пересчитать метрики по журналу runs/eval-agent-*.jsonl без модели")
+    eval_agent.add_argument("--external", action="store_true",
+                            help="оценить только вопросы типа external (с поиском новых статей в интернете)")
+
+    from research_assistant.finetune.commands import COMMANDS as FT_COMMANDS
+    from research_assistant.finetune.commands import add_parsers as add_finetune_parsers
+
+    add_finetune_parsers(sub)
 
     args = parser.parse_args(argv)
+    if args.provider:
+        from research_assistant.providers import get_provider
+
+        try:
+            get_provider(args.provider)
+        except ValueError as error:
+            print(f"Ошибка: {error}")
+            return 2
+        # Через окружение — чтобы выбор увидел и процесс веб-интерфейса (команда ui запускает Streamlit).
+        os.environ["LLM_PROVIDER"] = args.provider.lower()
+    if args.command == "mcp":
+        from research_assistant.mcp_server import project_root
+
+        # .env и data/ ищутся от текущей папки: внешний агент может запустить сервер откуда угодно.
+        os.chdir(project_root(args.project_dir))
     settings = load_settings()
+    if args.command == "providers":
+        return cmd_providers(settings)
     if args.command == "check":
         return cmd_check(settings)
     if args.command == "ingest":
         return cmd_ingest(settings, args)
+    if args.command == "add":
+        return cmd_add(settings, args)
     if args.command == "library":
         return cmd_library(settings, args)
     if args.command == "parse":
@@ -648,8 +894,20 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_ask(settings, args)
     if args.command == "chat":
         return cmd_chat(settings, args)
+    if args.command == "read":
+        return cmd_read(settings, args)
+    if args.command == "coverage":
+        return cmd_coverage(settings, args)
     if args.command == "ui":
         return cmd_ui(args)
+    if args.command == "mcp":
+        from research_assistant.mcp_server import run_stdio
+
+        return run_stdio(settings, allow_model=args.allow_model, allow_write=args.allow_write, log=not args.no_log)
+    if args.command in FT_COMMANDS:
+        from research_assistant.finetune.commands import run as run_finetune
+
+        return run_finetune(settings, args)
     return 1
 
 

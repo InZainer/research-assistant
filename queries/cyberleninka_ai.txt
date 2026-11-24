@@ -1,0 +1,11 @@
+# Русскоязычные статьи по ИИ и цифровизации общепита, которых нет в выдаче OpenAlex (найдены веб-поиском).
+# Добавление: research-assistant add --file queries/cyberleninka_ai.txt --topic "ИИ в общепите"
+https://cyberleninka.ru/article/n/robotizatsiya-v-sfere-obschestvennogo-pitaniya
+https://cyberleninka.ru/article/n/analiz-i-optimizatsiya-primeneniya-metodov-iskusstvennogo-intellekta-v-kulinarii
+https://cyberleninka.ru/article/n/ispolzovanie-vr-tehnologiy-v-konkurentnoy-srede-restorannogo-biznesa
+https://cyberleninka.ru/article/n/avtomatizatsiya-predpriyatiy-obschestvennogo-pitaniya-s-ispolzovaniem-sovremennyh-tsifrovyh-tehnologiy-programm-arduino-ide-opc
+https://cyberleninka.ru/article/n/sovremennye-podhody-k-upravleniyu-dohodami-v-restorannom-biznese-ot-analitiki-k-praktike
+https://cyberleninka.ru/article/n/tendentsii-razvitiya-otrasli-obschestvennogo-pitaniya-v-moskve
+https://cyberleninka.ru/article/n/aktualnye-trendy-rynka-obschestvennogo-pitaniya-v-rossii-i-faktory-okazyvayuschie-na-nego-vliyanie
+https://cyberleninka.ru/article/n/sovremennoe-kachestvo-obsluzhivaniya-v-industrii-pitaniya-cherez-informatsionno-resursnyy-potentsial
+https://cyberleninka.ru/article/n/strategicheskie-voprosy-razvitiya-restorannogo-biznesa-v-usloviyah-pandemii-i-v-postpandemicheskiy-period

@@ -1,0 +1,14 @@
+# Русскоязычные статьи по маркетингу и соцсетям общепита (найдены веб-поиском).
+# Добавление: research-assistant add --file queries/cyberleninka_marketing.txt --topic "маркетинг и соцсети общепита"
+https://cyberleninka.ru/article/n/vozmozhnosti-smm-v-restorannom-biznese
+https://cyberleninka.ru/article/n/marketing-v-restorannom-biznese
+https://cyberleninka.ru/article/n/marketingovye-resheniya-v-restorannom-biznese
+https://cyberleninka.ru/article/n/vliyanie-pr-i-reklamnyh-kommunikatsiy-v-izmenenii-potrebitelskogo-povedeniya-klientov-na-primere-restorana-feniks
+https://cyberleninka.ru/article/n/vliyanie-imidzha-na-konkurentosposobnost-restorana-ili-zametki-nachinayuschego-restoratora
+https://cyberleninka.ru/article/n/strategicheskie-voprosy-razvitiya-restorannogo-biznesa-v-usloviyah-pandemii-i-v-postpandemicheskiy-period
+https://cyberleninka.ru/article/n/aktualnye-trendy-rynka-obschestvennogo-pitaniya-v-rossii-i-faktory-okazyvayuschie-na-nego-vliyanie
+# Общие работы об ИИ в маркетинге и SMM (не про общепит, как фон для «маркетинга с ИИ»)
+https://cyberleninka.ru/article/n/avtomatizatsiya-protsessa-upravleniya-internet-marketingom-pri-pomoschi-iskusstvennogo-intellekta
+https://cyberleninka.ru/article/n/avtomatizatsiya-marketingovyh-protsessov-s-pomoschyu-iskusstvennogo-intellekta-preimuschestva-i-vyzovy
+https://cyberleninka.ru/article/n/iskusstvennyy-intellekt-v-reklamnoy-industrii-analiz-tehnologiy-i-effektivnosti-primeneniya
+https://cyberleninka.ru/article/n/smm-marketing-v-sotsialnyh-setyah-strategiya-i-taktika

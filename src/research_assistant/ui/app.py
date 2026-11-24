@@ -7,7 +7,7 @@
 import streamlit as st
 
 from research_assistant.agent.loop import run_agent
-from research_assistant.agent.session import make_agent, make_searcher
+from research_assistant.agent.session import make_agent, make_searcher, run_options
 from research_assistant.agent.tools import SECTION_KINDS
 from research_assistant.config import load_settings
 from research_assistant.ingest.http import HttpClient
@@ -103,7 +103,8 @@ with st.sidebar:
         st.toggle("Разрешить искать новые статьи в интернете", key="external", value=False,
                   help="Ассистент сможет найти статьи в OpenAlex и arXiv и добавить их в библиотеку, если вы "
                        "попросите. Добавление долгое: скачивание, разбор и разметка каждой статьи.")
-        st.caption(f"Модель: {settings.model or 'не задана'}  \nЭмбеддинги: {settings.embed_model or 'нет'}  \n"
+        st.caption(f"Провайдер: {settings.provider or 'OPENAI_*'}  \nМодель: {settings.model or 'не задана'}  \n"
+                   f"Эмбеддинги: {settings.embed_model or 'нет'}  \n"
                    f"Чаты хранятся в {settings.data_dir / 'chats'}, подробные журналы шагов — в {settings.runs_dir}.")
 
 
@@ -216,7 +217,11 @@ def welcome() -> None:
     st.markdown("**Попробуйте спросить:**")
     for i, example in enumerate(EXAMPLES):
         st.button(example, key=f"example-{i}", on_click=ask_example, args=(example,), icon="💡")
-    st.caption("Ответ обычно занимает 20–60 секунд: модель работает локально на вашем компьютере.")
+    if any(host in (settings.base_url or "") for host in ("localhost", "127.0.0.1")):
+        st.caption("Ответ обычно занимает 20–60 секунд: модель работает локально на вашем компьютере.")
+    else:
+        st.caption(f"Ответ обычно занимает 10–30 секунд: модель {settings.model} работает в облаке, "
+                   "туда уходят вопрос и найденные фрагменты статей.")
 
 
 def run_question(chat: Chat, question: str) -> None:
@@ -237,9 +242,9 @@ def run_question(chat: Chat, question: str) -> None:
                 ctx, model, http = make_agent(settings, library, external=state.get("external", False))
                 try:
                     # prefetch — как в ask/chat: лучший вариант в эксперименте E3 (docs/experiments.md)
-                    result = run_agent(question, ctx, model, max_steps=settings.max_steps, history=chat.history(),
+                    result = run_agent(question, ctx, model, history=chat.history(),
                                        log_path=settings.runs_dir / f"ui-{chat.id}.jsonl", prefetch=True,
-                                       on_event=on_event)
+                                       on_event=on_event, **run_options(settings))
                 finally:
                     http.close()
                 view = answer_view(library, result, steps, found=list(ctx.candidates.values()))

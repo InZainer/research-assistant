@@ -40,7 +40,16 @@ def page_at(pages: list[tuple[int, int | None]], offset: int) -> int | None:
 
 def paragraph_passages(paragraph: Paragraph, max_words: int = MAX_PASSAGE_WORDS) -> list[PassageOut]:
     text = paragraph.text
-    spans = split_sentences(text) or [(0, len(text))]
+    if paragraph.kind == "table":
+        # У таблицы «предложение» — строка: её можно процитировать по ID вместе со всеми ячейками.
+        spans, offset = [], 0
+        for row in text.split("\n"):
+            if row.strip():
+                spans.append((offset, offset + len(row)))
+            offset += len(row) + 1
+    else:
+        spans = split_sentences(text) or [(0, len(text))]
+    spans = spans or [(0, len(text))]
     chunks: list[list[tuple[int, int]]] = [[]]
     words = 0
     for start, end in spans:

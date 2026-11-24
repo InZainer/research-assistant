@@ -197,3 +197,29 @@ def test_whole_journal_issue_picks_title_followed_by_abstract():
 
     document = build_document(d.units, title=title)
     assert titles(document) == [("Abstract", "abstract"), ("Введение", "introduction")]
+
+
+def test_caption_continues_after_a_heading_or_a_table_in_between():
+    from research_assistant.parse.structure import build_document
+    from research_assistant.parse.units import Unit
+
+    units = [
+        Unit("Results", 1, 1, bold=True, size=1.3),
+        Unit("The ranking of the features is stable across the three chains that we study here.", 1, 2, size=1.0),
+        Unit("Table 2: Average NDCG of the", 1, 3, size=1.0),
+        Unit("Density | 0.60 | 0.73", 1, 4, size=1.0, kind="table"),
+        Unit("Entropy | 0.65 | 0.69", 1, 4, size=1.0, kind="table"),
+        Unit("individual features for every chain.", 1, 3, size=1.0),  # подпись продолжается после таблицы
+        Unit("Figure 1: Overview of", 2, 5, size=1.0),
+        Unit("Discussion", 2, 6, bold=True, size=1.3),
+        Unit("the proposed pipeline.", 2, 5, size=1.0),  # продолжение подписи после заголовка: раньше IndexError
+        Unit("The mobility features are the strongest ones in every city that we looked at.", 2, 7, size=1.0),
+    ]
+    document = build_document(units)
+    results, discussion = document.sections
+    assert [(p.kind, p.text) for p in results.paragraphs][1:] == [
+        ("caption", "Table 2: Average NDCG of the individual features for every chain."),
+        ("table", "Density | 0.60 | 0.73\nEntropy | 0.65 | 0.69"),
+        ("caption", "Figure 1: Overview of the proposed pipeline."),
+    ]
+    assert [p.kind for p in discussion.paragraphs] == ["text"]

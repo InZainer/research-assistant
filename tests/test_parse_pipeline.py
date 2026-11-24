@@ -75,3 +75,49 @@ def test_reparse_replaces_structure_and_respects_version(library):
     assert sum(parse_papers(library, force=True).values()) == 1
     count = library.conn.execute("SELECT COUNT(*) FROM passages").fetchone()[0]
     assert count == 1  # старый разбор удалён, а не продублирован
+
+
+# --- базу перенесли без PDF ---
+
+def test_missing_file_keeps_the_previous_full_parse(library, tmp_path):
+    from research_assistant.parse.passages import SectionOut, paragraph_passages
+    from research_assistant.parse.structure import Paragraph
+
+    paper = add_paper(library, "Parsed on another machine", abstract="Short abstract of the paper.",
+                      status="ok", path=str(tmp_path / "gone.pdf"), kind="pdf")
+    section = SectionOut("Method", "method", 1)
+    section.passages = paragraph_passages(Paragraph("The full text was parsed where the PDF still existed.", [(0, 1)]))
+    library.save_structure(paper["id"], [section], status="ok", parser="pdf", version=PARSER_VERSION - 1)
+
+    outcome = parse_paper(library, library.get_paper(paper["id"]))
+    assert outcome.status == "kept" and "оставлен прежний разбор" in outcome.error
+    texts = [r[0] for r in library.conn.execute("SELECT text FROM passages WHERE paper_id = ?", (paper["id"],))]
+    assert texts == ["The full text was parsed where the PDF still existed."]  # не заменён аннотацией
+    assert parse_papers(library)["kept"] == 1
+
+    never = add_paper(library, "Never parsed and the file is gone", abstract="Only the abstract is available here.",
+                      status="ok", path=str(tmp_path / "gone2.pdf"), kind="pdf")
+    assert parse_paper(library, never).status == "failed"  # прежнего разбора нет — остаётся аннотация
+
+
+def test_paper_parsed_from_abstract_is_reparsed_when_the_full_text_arrives(library, tmp_path):
+    paper = add_paper(library, "Downloaded later", abstract="Only the abstract was known at first.")
+    assert parse_papers(library)["metadata"] == 1
+    assert parse_papers(library) == {}  # полного текста всё ещё нет — разбирать нечего
+    path = tmp_path / "later.pdf"
+    make_pdf(path)
+    library.set_fulltext(paper["id"], "ok", str(path), "pdf")
+    assert parse_papers(library)["ok"] == 1  # та же версия парсера, но появился полный текст
+    assert parse_papers(library) == {}
+
+    scan = tmp_path / "scan.pdf"
+    import pymupdf
+    doc = pymupdf.open()
+    doc.new_page()
+    doc.save(scan)
+    doc.close()
+    empty = add_paper(library, "Scanned paper without a text layer", abstract="Abstract of the scanned paper.",
+                      status="ok", path=str(scan), kind="pdf")
+    outcome = parse_paper(library, empty)
+    assert outcome.status == "failed" and "не нашлось текста" in outcome.error
+    assert parse_papers(library) == {}  # скан не разбирается заново при каждом запуске

@@ -2,6 +2,7 @@
 
 import hashlib
 import json
+import threading
 import time
 from collections.abc import Callable
 from pathlib import Path
@@ -10,6 +11,9 @@ from urllib.parse import urlencode, urlsplit
 import httpx
 
 RETRY_STATUSES = {429, 500, 502, 503, 504}
+# Дольше этого Retry-After не ждём: OpenAlex без ключа при исчерпанном дневном лимите просит подождать больше
+# часа, и сбор молча «засыпал» на поиске. Лучше сообщить и идти дальше.
+MAX_RETRY_AFTER = 300
 
 
 class FetchError(Exception):
@@ -37,7 +41,8 @@ class HttpClient:
         self.backoffs: dict[str, tuple[float, ...]] = {}
         self._sleep = sleep
         self._clock = clock
-        self._last_request: dict[str, float] = {}
+        self._ready: dict[str, float] = {}  # когда к хосту можно идти снова
+        self._lock = threading.Lock()  # полные тексты качаются в несколько потоков (ingest/pipeline.py)
         self._client = httpx.Client(
             headers={"User-Agent": user_agent}, follow_redirects=True, timeout=timeout, transport=transport
         )
@@ -55,12 +60,14 @@ class HttpClient:
 
     def _throttle(self, host: str) -> None:
         interval = self.intervals.get(host, self.default_interval)
-        last = self._last_request.get(host)
-        if last is not None:
-            wait = interval - (self._clock() - last)
-            if wait > 0:
-                self._sleep(wait)
-        self._last_request[host] = self._clock()
+        # Очередь к хосту: поток бронирует своё время под замком и ждёт уже без него, поэтому два потока
+        # не попадут на один сайт чаще, чем раз в interval.
+        with self._lock:
+            now = self._clock()
+            ready = max(now, self._ready.get(host, now))
+            self._ready[host] = ready + interval
+        if ready > now:
+            self._sleep(ready - now)
 
     def get(self, url: str, params: dict | None = None, timeout: float | None = None) -> httpx.Response:
         """GET с паузой для хоста и повторами на 429/5xx и сетевых ошибках. Остальные коды возвращает как есть."""
@@ -81,7 +88,11 @@ class HttpClient:
                 return response
             if attempt == len(backoff):
                 raise FetchError(f"HTTP {response.status_code} после {attempt + 1} попыток: {url}")
-            self._sleep(_retry_after(response) or backoff[attempt])
+            delay = _retry_after(response) or backoff[attempt]
+            if delay > MAX_RETRY_AFTER:
+                raise FetchError(f"HTTP {response.status_code}: лимит запросов исчерпан, источник просит подождать "
+                                 f"{round(delay / 60)} мин: {url}")
+            self._sleep(delay)
         raise AssertionError("недостижимо")
 
     def get_text(

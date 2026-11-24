@@ -67,12 +67,20 @@ def find_papers(
     hits.sort(key=lambda h: (-h.score, -(h.paper["year"] or 0)))
     hits = hits[:limit]
 
-    if searcher is not None and searcher.dense_ready and candidates and len(hits) < limit:
+    if (searcher is not None and searcher.dense_ready and not searcher.dense_failed and candidates
+            and len(hits) < limit):
         found = {h.paper["id"] for h in hits}
         by_id = {p["id"]: p for p in candidates}
         where = PassageFilter(section_kinds=["abstract"], paper_ids=list(by_id))
         added = 0
-        for hit in searcher.search(query, k=SEMANTIC_PAPERS * 4, mode="dense", where=where):
+        try:
+            similar = searcher.search(query, k=SEMANTIC_PAPERS * 4, mode="dense", where=where)
+        except Exception as exc:
+            # Сервер эмбеддингов выключен или в нём нет модели: «похожие по смыслу» — дополнение, не обязательный
+            # шаг. Раньше инструмент агента падал здесь с BadRequestError (журналы от 14 ноября 2026).
+            searcher.dense_failed = f"плотный поиск недоступен ({type(exc).__name__}), только BM25"
+            similar = []
+        for hit in similar:
             paper_id = hit.passage["paper_id"]
             if paper_id in found:
                 continue

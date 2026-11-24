@@ -26,12 +26,20 @@ def make_searcher(settings: Settings, library: Library, with_llm: bool = False) 
 
         searcher.embedder = OpenAIEmbedder(settings.embed_model, settings.embed_base_url, settings.embed_api_key)
         searcher.index = VectorIndex.load(index_path(settings.vectors_dir, settings.embed_model))
+        passages = library.conn.execute("SELECT COUNT(*) FROM passages").fetchone()[0]
+        searcher.index_partial = 0 < len(searcher.index) < passages
     if with_llm and not settings.missing_llm_vars():
         from research_assistant.retrieval.rerank import LLMReranker, QueryTranslator
 
         model = ChatModel(settings.model, settings.base_url, settings.api_key, reasoning_effort=settings.reasoning_effort)
         searcher.reranker, searcher.translator = LLMReranker(model), QueryTranslator(model)
     return searcher
+
+
+def run_options(settings: Settings) -> dict:
+    """Параметры run_agent из настроек — одни и те же в ask, chat и веб-интерфейсе."""
+    return {"max_steps": settings.max_steps, "research_calls": settings.research_calls,
+            "observation_chars": settings.observation_chars, "hints": settings.answer_hints}
 
 
 def make_add_papers(
@@ -80,5 +88,10 @@ def make_agent(settings: Settings, library: Library, external: bool = True) -> t
     model = ChatModel(settings.model, settings.base_url, settings.api_key, reasoning_effort=settings.reasoning_effort)
     if external:
         add_fn = make_add_papers(library, searcher, FulltextFetcher(http, RobotsPolicy(http), settings.fulltext_dir), model)
+    # Переводчик запроса срабатывает, только когда поиск остался без эмбеддингов или индекс неполный
+    # (Searcher.search): тогда русский вопрос по английским статьям находит ответ и на BM25.
+    from research_assistant.retrieval.rerank import QueryTranslator
+
+    searcher.translator = QueryTranslator(model)
     ctx = ToolContext(library=library, searcher=searcher, sources=sources, add_papers_fn=add_fn)
     return ctx, model, http

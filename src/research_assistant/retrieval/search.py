@@ -50,6 +50,11 @@ class Searcher:
         self.index = index
         self.reranker = reranker  # LLMReranker или любой объект с rerank(query, [(id, текст)]) -> [id]
         self.translator = translator  # QueryTranslator: перевод неанглийского запроса для BM25
+        self.last_warning: str | None = None  # последняя деградация поиска (например, нет сервера эмбеддингов)
+        self.dense_failed: str | None = None  # сервер эмбеддингов не ответил: больше не ждём его в этом поиске
+        # Индекс векторов покрывает не всю библиотеку (новые статьи ещё не проиндексированы): для них
+        # межъязыковой поиск держится на переводе запроса. Выставляет agent/session.make_searcher.
+        self.index_partial = False
 
     @property
     def dense_ready(self) -> bool:
@@ -69,21 +74,40 @@ class Searcher:
         translate: bool = False, rerank: bool = False,
     ) -> list[Hit]:
         """translate — добавить BM25 по английскому переводу запроса; rerank — переупорядочить
-        первые RERANK_POOL кандидатов реранкером. Оба шага требуют соответствующих объектов в Searcher."""
+        первые RERANK_POOL кандидатов реранкером. Оба шага требуют соответствующих объектов в Searcher.
+
+        Если гибридный поиск остался без плотного списка (нет эмбеддингов, сервер не ответил) или индекс
+        покрывает не всю библиотеку, перевод включается сам и в обе стороны: BM25 не находит английскую
+        статью по русскому вопросу и наоборот, а плотного поиска, который это умеет, нет."""
         if mode not in MODES:
             raise ValueError(f"неизвестный режим {mode}; доступны {', '.join(MODES)}")
+        self.last_warning = None
+        wanted_hybrid = mode == "hybrid"
         if mode == "hybrid" and not self.dense_ready:
             mode = "bm25"  # без эмбеддингов гибрид вырождается в BM25
         depth = max(k, RERANK_POOL) if rerank and self.reranker else k
         rankings: dict[str, list[int]] = {}
         if mode in ("bm25", "hybrid"):
             rankings["bm25"] = [i for i, _ in self.bm25(query, CANDIDATES if mode == "hybrid" else depth, where)]
-        if mode in ("dense", "hybrid"):
-            rankings["dense"] = [i for i, _ in self.dense(query, CANDIDATES if mode == "hybrid" else depth, where)]
-        if translate and self.translator is not None and mode != "dense":
+        if mode == "hybrid" and self.dense_failed:
+            self.last_warning = self.dense_failed
+        elif mode in ("dense", "hybrid"):
+            try:
+                rankings["dense"] = [i for i, _ in self.dense(query, CANDIDATES if mode == "hybrid" else depth, where)]
+            except Exception as exc:
+                if mode == "dense":
+                    raise
+                # Сервер эмбеддингов (LM Studio) выключен, а чат-модель облачная: ищем хотя бы по словам,
+                # а не роняем агента. Что случилось, видно в last_warning.
+                self.last_warning = self.dense_failed = f"плотный поиск недоступен ({type(exc).__name__}), только BM25"
+        cross_lingual = wanted_hybrid and ("dense" not in rankings or self.index_partial)
+        if (translate or cross_lingual) and self.translator is not None and mode != "dense":
             english = self.translator.to_english(query)
             if english:
                 rankings["bm25_en"] = [i for i, _ in self.bm25(english, CANDIDATES, where)]
+            russian = self.translator.to_russian(query) if cross_lingual and not english else None
+            if russian:
+                rankings["bm25_ru"] = [i for i, _ in self.bm25(russian, CANDIDATES, where)]
         if len(rankings) == 1:
             name, ids = next(iter(rankings.items()))
             ranked = [(i, 1.0 / place, {name: place}) for place, i in enumerate(ids, 1)]

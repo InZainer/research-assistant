@@ -1,0 +1,65 @@
+# Тема «ИИ в общепите»: запросы для ingest --queries-file (по одному в строке).
+# Русские формулировки — упор на российский рынок; OpenAlex не склоняет русские слова, поэтому вариантов много.
+искусственный интеллект ресторанный бизнес
+искусственный интеллект общественное питание
+искусственный интеллект в ресторане
+искусственный интеллект предприятия питания
+нейросети ресторан
+нейросети общественное питание
+нейронные сети ресторанный бизнес
+машинное обучение ресторан
+машинное обучение общественное питание
+цифровизация ресторанного бизнеса
+цифровизация общественного питания
+цифровая трансформация общественного питания
+цифровая трансформация ресторанного бизнеса
+цифровые технологии в ресторанном бизнесе
+цифровые технологии общественное питание
+роботизация ресторан
+роботы в общественном питании
+чат-бот ресторан
+прогнозирование спроса ресторан
+прогнозирование выручки ресторана
+автоматизация ресторана
+автоматизация предприятий общественного питания
+инновационные технологии общественное питание
+инновации в ресторанном бизнесе
+фудтех Россия
+foodtech Россия ресторан
+доставка еды искусственный интеллект
+большие данные ресторанный бизнес
+рекомендательная система блюд
+HoReCa искусственный интеллект
+индустрия гостеприимства искусственный интеллект ресторан
+умный ресторан
+# Английские формулировки
+artificial intelligence restaurant
+artificial intelligence restaurant industry
+artificial intelligence food service
+artificial intelligence foodservice industry
+artificial intelligence catering industry
+machine learning restaurant
+deep learning restaurant
+restaurant demand forecasting machine learning
+restaurant sales forecasting
+restaurant revenue prediction
+food delivery machine learning
+service robots restaurant
+robot restaurant customer acceptance
+chatbot restaurant
+ChatGPT restaurant
+large language model restaurant
+generative AI restaurant
+restaurant recommendation system
+menu recommendation deep learning
+food waste restaurant machine learning
+restaurant inventory optimization machine learning
+computer vision restaurant kitchen
+restaurant site selection machine learning
+dynamic pricing restaurant
+smart restaurant artificial intelligence
+voice ordering restaurant
+quick service restaurant artificial intelligence
+artificial intelligence restaurant Russia
+restaurant customer churn prediction
+restaurant staff scheduling optimization machine learning
