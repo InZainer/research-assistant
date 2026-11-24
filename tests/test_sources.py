@@ -173,3 +173,54 @@ def test_openalex_author_search_checks_profile_names():
     http = RoutedHttp({"https://api.openalex.org/authors": {"results": []}})
     assert OpenAlexSource(http).search("", author="Nobody Atall") == []
     assert [url for url, _ in http.calls] == ["https://api.openalex.org/authors"]  # работы без автора не ищем
+
+
+# --- OpenAlex: постранично, закрытые статьи, страна, DOI ---
+
+class PagedHttp(FakeHttp):
+    """Отдаёт по 200 работ на страницу, пока не кончатся total."""
+
+    def __init__(self, total):
+        super().__init__()
+        self.total = total
+
+    def get_json(self, url, params=None, use_cache=True, timeout=None):
+        self.calls.append((url, params))
+        start = 0 if params.get("cursor") in (None, "*") else int(params["cursor"])
+        stop = min(start + params["per_page"], self.total)
+        works = [{"id": f"https://openalex.org/W{i}", "display_name": f"Paper number {i} about restaurants",
+                  "abstract_inverted_index": {"text": [0]} if i % 2 else None,
+                  "best_oa_location": {"pdf_url": f"https://j.org/{i}.pdf"} if i % 4 == 0 else None}
+                 for i in range(start, stop)]
+        return {"results": works, "meta": {"next_cursor": str(stop) if stop < self.total else None}}
+
+
+def test_openalex_pages_through_results_by_cursor():
+    http = PagedHttp(total=1000)
+    records = OpenAlexSource(http).search("restaurant", limit=450)
+    assert len(records) == 450 and len({r.openalex_id for r in records}) == 450
+    assert [params["cursor"] for _, params in http.calls] == ["*", "200", "400"]
+    assert all(params["per_page"] == 200 and params["search"] == "restaurant" for _, params in http.calls)
+    short = PagedHttp(total=230)
+    assert len(OpenAlexSource(short).search("restaurant", limit=450)) == 230 and len(short.calls) == 2
+    one = PagedHttp(total=1000)
+    assert len(OpenAlexSource(one).search("restaurant", limit=50)) == 50
+    assert "cursor" not in one.calls[0][1]  # одна страница — без курсора, как раньше
+
+
+def test_openalex_closed_papers_need_an_abstract_and_country_filter():
+    assert "filter" not in build_params("rag", 10, open_access_only=False)
+    assert build_params("rag", 10, country="ru")["filter"] == "is_oa:true,authorships.institutions.country_code:RU"
+    http = PagedHttp(total=8)
+    records = OpenAlexSource(http, open_access_only=False, country="RU").search("restaurant", limit=8)
+    assert http.calls[0][1]["filter"] == "authorships.institutions.country_code:RU"
+    # чётные без аннотации: остаются только те из них, у кого есть PDF (0 и 4)
+    assert sorted(int(r.openalex_id[1:]) for r in records) == [0, 1, 3, 4, 5, 7]
+
+
+def test_openalex_by_doi():
+    http = PagedHttp(total=1)
+    record = OpenAlexSource(http, mailto="me@example.org").by_doi("10.1234/x")
+    assert record.openalex_id == "W0"
+    assert http.calls[0][1]["filter"] == "doi:10.1234/x" and http.calls[0][1]["mailto"] == "me@example.org"
+    assert OpenAlexSource(PagedHttp(total=0)).by_doi("10.1234/none") is None

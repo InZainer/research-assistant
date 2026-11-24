@@ -16,6 +16,9 @@ wheels/
 # Данные: PDF, база, векторы, кэш внешних API
 data/
 
+# Опись архива проекта: её пишет scripts/make_project_bundle.py внутрь zip
+/MANIFEST.json
+
 # Журналы прогонов: в git только то, что нужно для отчёта (добавлять через git add -f)
 runs/*
 !runs/.gitkeep

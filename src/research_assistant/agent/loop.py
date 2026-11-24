@@ -4,6 +4,7 @@
 - Ошибка инструмента (неизвестное имя, битые аргументы, исключение) возвращается модели как наблюдение.
 - Ответ принимается только через final_answer, и только если все ID предложений агент видел в выдаче.
 - Каждый шаг пишется в JSONL: вызов модели с usage, вызов инструмента с аргументами и временем.
+  У ошибки инструмента в журнале есть вид (error_kind) — по нему считаются метрики поведения.
 """
 
 import json
@@ -13,7 +14,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 
-from research_assistant.agent.prompts import NUDGE_FINAL_ANSWER, SYSTEM_PROMPT
+from research_assistant.agent.prompts import NUDGE_FINAL_ANSWER, SYSTEM_PROMPT, answer_hints
 from research_assistant.agent.tools import (
     FINAL_ANSWER,
     FINAL_ANSWER_QUOTES,
@@ -21,6 +22,7 @@ from research_assistant.agent.tools import (
     ToolContext,
     ToolError,
     available_schemas,
+    prompt_hash,
     search_library,
     wants_to_add,
 )
@@ -52,9 +54,13 @@ class AgentResult:
     steps: int = 0
     tool_calls: int = 0
     tool_errors: int = 0
+    nudges: int = 0  # сколько раз модели напомнили вызвать final_answer
     usage: Usage = field(default_factory=Usage)
     seconds: float = 0.0
     log_path: str | None = None
+    # Ровно то, что видела модель: сообщения и схемы инструментов. Источник траекторий для дообучения.
+    messages: list[dict] = field(default_factory=list, repr=False)
+    tools: list[dict] = field(default_factory=list, repr=False)
 
 
 class RunLog:
@@ -77,8 +83,25 @@ class RunLog:
             f.write(json.dumps(record, ensure_ascii=False, default=str) + "\n")
 
 
+REPEATED_CALL = ("You already made this exact call; its results are above. Use the passages you have "
+                 "and call final_answer, or search with different words.")
+
+
+def _call_key(name: str, args: dict) -> str:
+    """Ключ вызова для поиска точных повторов: имя и аргументы без учёта порядка ключей и регистра запроса."""
+    # k — только длина выдачи: тот же запрос с другим k возвращает те же фрагменты.
+    norm = {k: (" ".join(v.casefold().split()) if isinstance(v, str) else v) for k, v in args.items() if k != "k"}
+    return name + json.dumps(norm, sort_keys=True, ensure_ascii=False)
+
+
 def _truncate(text: str, limit: int = MAX_OBSERVATION_CHARS) -> str:
-    return text if len(text) <= limit else text[:limit] + f"\n… [truncated, {len(text) - limit} more characters]"
+    """Обрезает по границе строки: в выдаче поиска строка — предложение с ID, и обрывок предложения
+    модель цитировала бы как целое."""
+    if len(text) <= limit:
+        return text
+    cut = text.rfind("\n", limit // 2, limit)
+    cut = cut if cut > 0 else limit
+    return text[:cut] + f"\n… [truncated, {len(text) - cut} more characters]"
 
 
 def _assistant_message(message) -> dict:
@@ -157,12 +180,20 @@ def run_agent(
     single_shot: bool = False,
     prefetch: bool = False,
     on_event: Callable[[str, dict], None] | None = None,
+    extra_system: str | None = None,
+    qid: str | None = None,
+    research_calls: int = MAX_RESEARCH_CALLS,
+    observation_chars: int = MAX_OBSERVATION_CHARS,
+    hints: bool = False,
 ) -> AgentResult:
     """answer_mode="quotes" — цитаты текстом от модели (эксперимент E2);
     single_shot=True — один поиск по вопросу и сразу ответ, без итераций (базовая линия для E3);
     prefetch=True — тот же поиск по вопросу заранее, но инструменты остаются: агент может ответить сразу
     или искать дальше.
-    on_event(событие, данные) — те же события, что пишутся в журнал (start, llm, tool, nudge, finish)."""
+    on_event(событие, данные) — те же события, что пишутся в журнал (start, llm, tool, nudge, finish).
+    qid — ID вопроса из набора оценки: пишется в start, по нему --rescore сопоставляет прогон с вопросом.
+    research_calls, observation_chars — бюджет поисков и длина наблюдения (по умолчанию — как у локальной 4B);
+    hints — дописать к системному промпту подсказки о языке и полноте ответа (prompts.answer_hints)."""
     started = time.perf_counter()
     log = RunLog(log_path, on_event)
     result = AgentResult(question=question, answer="", log_path=str(log_path) if log_path else None)
@@ -170,28 +201,35 @@ def run_agent(
     tools = available_schemas(ctx)
     if answer_mode == "quotes":
         tools = [t for t in tools if t["function"]["name"] != FINAL_ANSWER] + [FINAL_ANSWER_QUOTES]
-    messages = [{"role": "system", "content": SYSTEM_PROMPT}, *(history or []), {"role": "user", "content": question}]
+    # extra_system — подсказка только для учителя при сборе траекторий (finetune/trajectories.py); при экспорте
+    # в обучающий пример возвращается штатный SYSTEM_PROMPT.
+    extras = [text for text in (answer_hints(question) if hints else None, extra_system) if text]
+    system = SYSTEM_PROMPT + "".join(f"\n{text}" for text in extras)
+    messages = [{"role": "system", "content": system}, *(history or []), {"role": "user", "content": question}]
     log.write("start", question=question, model=model.model, tools=[t["function"]["name"] for t in tools],
-              answer_mode=answer_mode, single_shot=single_shot, prefetch=prefetch)
-    nudges = 0
-    research_calls = 0
+              answer_mode=answer_mode, single_shot=single_shot, prefetch=prefetch, prompt_hash=prompt_hash(),
+              qid=qid, history=history or [], research_calls=research_calls, hints=hints)
+    research_done = 0
+    seen_calls: set[str] = set()  # точные повторы вызовов: Qwen3.5-4B крутила одни и те же поиски до лимита
     final_only = [t for t in tools if t["function"]["name"] == FINAL_ANSWER]
     if single_shot or prefetch:
         # Поиск по самому вопросу делает код: при single_shot модели остаётся только ответить.
         observation = search_library(ctx, question, k=6)
         call_id = "single_shot_search"
+        seen_calls.add(_call_key("search_library", {"query": question, "k": 6}))
         messages.append({"role": "assistant", "content": "", "tool_calls": [{
             "id": call_id, "type": "function",
             "function": {"name": "search_library", "arguments": json.dumps({"query": question, "k": 6}, ensure_ascii=False)},
         }]})
-        messages.append({"role": "tool", "tool_call_id": call_id, "content": _truncate(observation)})
-        log.write("tool", step=0, name="search_library", arguments=question, error=None, seconds=0,
-                  observation=_truncate(observation))
+        observation = _truncate(observation, observation_chars)
+        messages.append({"role": "tool", "tool_call_id": call_id, "content": observation})
+        log.write("tool", step=0, name="search_library", arguments=question, error=None, error_kind=None,
+                  seconds=0, observation=observation)
 
     for step in range(1, max_steps + 1):
         result.steps = step
         # На последнем шаге и после исчерпания бюджета исследования модель может только ответить.
-        must_answer = single_shot or step == max_steps or research_calls >= MAX_RESEARCH_CALLS
+        must_answer = single_shot or step == max_steps or research_done >= research_calls
         response = model.complete(messages, final_only if must_answer else tools)
         result.usage.add(response.usage)
         message = response.choices[0].message
@@ -201,13 +239,13 @@ def run_agent(
             tool_calls=[{"name": c.function.name, "arguments": c.function.arguments} for c in calls],
             usage={"prompt": getattr(response.usage, "prompt_tokens", None),
                    "completion": getattr(response.usage, "completion_tokens", None)},
-            finish_reason=response.choices[0].finish_reason,
+            finish_reason=response.choices[0].finish_reason, final_only=must_answer,
         )
         messages.append(_assistant_message(message))
 
         if not calls:
-            if nudges < MAX_NUDGES:
-                nudges += 1
+            if result.nudges < MAX_NUDGES:
+                result.nudges += 1
                 messages.append({"role": "user", "content": NUDGE_FINAL_ANSWER})
                 log.write("nudge", step=step)
                 continue
@@ -220,9 +258,13 @@ def run_agent(
             name = call.function.name
             tool_started = time.perf_counter()
             error = None
+            # Вид ошибки для метрик: json | unknown_tool | bad_args — ошибки формата вызова; tool_error — отказ
+            # инструмента; env — сбой среды; answer_rejected — final_answer не прошёл проверку.
+            error_kind = None
             try:
                 args = json.loads(call.function.arguments or "{}")
                 if not isinstance(args, dict):
+                    error_kind = "bad_args"
                     raise ToolError("arguments must be a JSON object")
                 if name == FINAL_ANSWER and answer_mode == "quotes":
                     quotes, error = check_final_answer_quotes(args)
@@ -231,7 +273,7 @@ def run_agent(
                         result.not_found = bool(args.get("not_found"))
                         observation, finished = "Answer accepted.", True
                     else:
-                        observation = error
+                        observation, error_kind = error, "answer_rejected"
                 elif name == FINAL_ANSWER:
                     claims, error = check_final_answer(ctx, args)
                     if error is None:
@@ -239,27 +281,38 @@ def run_agent(
                         result.not_found = bool(args.get("not_found"))
                         observation, finished = "Answer accepted.", True
                     else:
-                        observation = error
+                        observation, error_kind = error, "answer_rejected"
                 elif name in FUNCTIONS:
-                    research_calls += 1
-                    observation = FUNCTIONS[name](ctx, **args)
+                    research_done += 1
+                    key = _call_key(name, args)
+                    if key in seen_calls:
+                        observation = REPEATED_CALL
+                    else:
+                        seen_calls.add(key)
+                        observation = FUNCTIONS[name](ctx, **args)
                 else:
+                    error_kind = "unknown_tool"
                     raise ToolError(f"unknown tool {name}; available: {', '.join(t['function']['name'] for t in tools)}")
             except json.JSONDecodeError as exc:
                 error = observation = f"Error: arguments are not valid JSON ({exc.msg}). Call {name} again."
+                error_kind = "json"
             except TypeError as exc:
                 error = observation = f"Error: wrong arguments for {name}: {exc}"
+                error_kind = "bad_args"
             except ToolError as exc:
                 error = observation = f"Error: {exc}"
+                error_kind = error_kind or "tool_error"
             except Exception as exc:  # среда: база, сеть, модель эмбеддингов — модель должна узнать об этом
                 error = observation = f"Error in {name}: {type(exc).__name__}: {exc}"
+                error_kind = "env"
             if error:
                 result.tool_errors += 1
-            observation = _truncate(observation)
+            observation = _truncate(observation, observation_chars)
             if not finished:
-                observation += _budget_note(max_steps - step, MAX_RESEARCH_CALLS - research_calls)
+                observation += _budget_note(max_steps - step, research_calls - research_done)
             log.write("tool", step=step, name=name, arguments=call.function.arguments, error=error,
-                      seconds=round(time.perf_counter() - tool_started, 3), observation=observation)
+                      error_kind=error_kind, seconds=round(time.perf_counter() - tool_started, 3),
+                      observation=observation)
             messages.append({"role": "tool", "tool_call_id": call.id, "content": observation})
         if finished:
             break
@@ -267,9 +320,10 @@ def run_agent(
         result.stop_reason = "max_steps"
 
     result.seconds = time.perf_counter() - started
+    result.messages, result.tools = messages, tools
     log.write(
         "finish", stop_reason=result.stop_reason, steps=result.steps, tool_calls=result.tool_calls,
-        tool_errors=result.tool_errors, not_found=result.not_found, answer=result.answer,
+        tool_errors=result.tool_errors, nudges=result.nudges, not_found=result.not_found, answer=result.answer,
         citations=[c.sentence_id for claim in result.claims for c in claim.citations],
         usage={"prompt": result.usage.prompt_tokens, "completion": result.usage.completion_tokens,
                "calls": result.usage.calls},

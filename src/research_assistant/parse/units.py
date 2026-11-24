@@ -25,6 +25,7 @@ class Unit:
     bold: bool = False
     size: float = 0.0
     y: float | None = None  # верх строки в долях высоты страницы (для сносок); у HTML нет
+    kind: str = "text"  # text | table: строка таблицы, ячейки через « | » (parse/pdf.py)
 
 
 def clean_text(text: str) -> str:

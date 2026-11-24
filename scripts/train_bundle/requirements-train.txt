@@ -1,0 +1,41 @@
+# Стек обучения Qwen3.5-4B (LoRA SFT) на RTX 5070. Основа — официальный ноутбук Unsloth
+# Qwen3_5_(4B)_Vision.ipynb: torch 2.8 (cu128), transformers 5.2.0, trl 0.22.2,
+# tokenizers 0.22–0.23, unsloth[base] и unsloth_zoo[base], torchao >= 0.16, затем `unsloth install-kernels`.
+#
+# Unsloth и unsloth_zoo закреплены релизом PyPI 2026.11.3 (6 ноября 2026), а не веткой main из git:
+# пересборка через месяц должна поставить то же самое. Нужен свежий релиз, а не февральский 2026.2.1
+# из вывода ноутбука: с тех пор unsloth_zoo встроил ядра Gated DeltaNet (fla) и исправил ошибки Qwen3.5.
+# Сменить релиз: поправьте обе строки ниже и пересоберите комплект (версия попадёт в MANIFEST.json).
+#
+# Почему здесь НЕТ --extra-index-url для cu128: uv по умолчанию берёт пакет только из первого индекса,
+# где он нашёлся, и тогда certifi/setuptools пришли бы из индекса PyTorch со старыми версиями — разбор
+# зависимостей не сходится. Поэтому setup_wsl.sh ставит torch 2.8.0+cu128 ОТДЕЛЬНОЙ командой
+# (шаг 4, --index-url .../whl/cu128), а строка torch==2.8.0 ниже только удерживает уже стоящую сборку:
+# 2.8.0+cu128 удовлетворяет ==2.8.0, и ни uv, ни pip её не заменят.
+# RTX 5070 — Blackwell (sm_120), ей нужна CUDA 12.8+. В Windows нужен только драйвер NVIDIA R570+;
+# CUDA Toolkit внутри WSL ставить не надо.
+#
+# triton отдельно НЕ обновлять: torch 2.8 тянет свою версию triton, которая уже умеет Blackwell.
+# Qwen3.5 работает только с transformers v5: старые версии не загрузят модель.
+# torchao закреплён на 0.16.0 (ноутбук ставит torchao>=0.16.0; в феврале это и была 0.16.0): без закрепления
+# unsloth_zoo подтянул бы 0.18, собранную под более новый torch.
+
+torch==2.8.0
+torchvision==0.23.0
+
+unsloth_zoo[base]==2026.11.3
+unsloth[base]==2026.11.3
+torchao==0.16.0
+
+transformers==5.2.0
+trl==0.22.2
+tokenizers>=0.22.0,<=0.23.0
+peft
+accelerate
+datasets
+bitsandbytes
+
+# --check-gguf (сверка чат-шаблона внутри GGUF) и конвертер llama.cpp
+gguf
+sentencepiece
+protobuf

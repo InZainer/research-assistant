@@ -68,7 +68,7 @@ SECTION_KINDS = [
 class Paragraph:
     text: str
     pages: list[tuple[int, int | None]]  # (смещение в text, номер страницы с этого места)
-    kind: str = "text"  # text | caption
+    kind: str = "text"  # text | caption | table (строки таблицы через перевод строки, ячейки через « | »)
 
 
 @dataclass
@@ -124,6 +124,8 @@ def is_caps(text: str) -> bool:
 
 def heading_candidate(unit: Unit) -> bool:
     """Может ли строка быть заголовком или его частью (например, номер «1» отдельной строкой)."""
+    if unit.kind == "table":
+        return False
     text = unit.text.strip()
     styled = unit.bold or unit.size >= HEADING_SIZE_RATIO
     if NUMBERING_ONLY_RE.match(text):
@@ -178,6 +180,7 @@ class _Builder:
         self.current: Paragraph | None = None  # последний текстовый абзац, который можно продолжить
         self.last_block: int | None = None
         self.runin_abstract = False  # раздел открыт абзацем «Аннотация: …», а не заголовком
+        self.caption: Paragraph | None = None  # последняя подпись: её продолжают следующие строки того же блока
 
     def section(self, title: str, kind: str, level: int, numbered: bool = False) -> None:
         if kind == "other" and level > 1:
@@ -203,7 +206,8 @@ class _Builder:
         section = self._target()
         same_block = unit.block == self.last_block
         if caption:
-            section.paragraphs.append(Paragraph(unit.text, [(0, unit.page)], kind="caption"))
+            self.caption = Paragraph(unit.text, [(0, unit.page)], kind="caption")
+            section.paragraphs.append(self.caption)
         elif self.current is not None and (same_block or continues(self.current.text, unit.text)):
             paragraph = self.current
             joined = join_lines(paragraph.text, unit.text, self.vocabulary)
@@ -220,9 +224,27 @@ class _Builder:
             section.paragraphs.append(self.current)
         self.last_block = unit.block
 
+    def add_table(self, unit: Unit) -> None:
+        """Строка таблицы. Соседние строки (и соседние блоки одной таблицы) собираются в один абзац-таблицу.
+        Текстовый абзац при этом не закрывается: таблица часто стоит посреди предложения."""
+        section = self._target()
+        last = section.paragraphs[-1] if section.paragraphs else None
+        if last is not None and last.kind == "table":
+            offset = len(last.text) + 1
+            last.text += "\n" + unit.text
+            if last.pages[-1][1] != unit.page:
+                last.pages.append((offset, unit.page))
+        else:
+            section.paragraphs.append(Paragraph(unit.text, [(0, unit.page)], kind="table"))
+
     def extend_caption(self, unit: Unit) -> None:
-        caption = self._target().paragraphs[-1]
-        caption.text = join_lines(caption.text, unit.text, self.vocabulary)
+        # Подпись запоминается объектом, а не берётся как «последний абзац раздела»: между строками одного
+        # блока мог начаться новый раздел (тогда абзацев в нём ещё нет — IndexError на 27 статьях из 990)
+        # или вклиниться таблица, и продолжение подписи приклеилось бы к ней.
+        if self.caption is None:
+            self.add(unit)
+            return
+        self.caption.text = join_lines(self.caption.text, unit.text, self.vocabulary)
 
 
 def _is_paper_title(name: str, title_key: str | None) -> bool:
@@ -307,7 +329,7 @@ def _junk_blocks(units: list[Unit], heading_lines: set[int]) -> set[int]:
     """Блоки-формулы, обрывки рисунков и сноски внизу страницы."""
     blocks: dict[int, list[Unit]] = {}
     for index, unit in enumerate(units):
-        if index not in heading_lines:
+        if index not in heading_lines and unit.kind != "table":
             blocks.setdefault(unit.block, []).append(unit)
     junk = set()
     for block, members in blocks.items():
@@ -377,6 +399,9 @@ def build_document(units: list[Unit], title: str | None = None) -> Document:
             if builder.sections and builder.sections[-1].kind == "abstract":
                 builder.section("", "body", 1)  # ключевые слова закрывают аннотацию
             continue
+        if unit.kind == "table":
+            builder.add_table(unit)
+            continue
         if EMAIL_RE.search(unit.text):
             continue
         if ABSTRACT_RUNIN_RE.match(unit.text) and builder.last_block != unit.block:
@@ -397,7 +422,7 @@ def build_document(units: list[Unit], title: str | None = None) -> Document:
     for section in builder.sections:
         section.paragraphs = [
             p for p in section.paragraphs
-            if p.kind == "caption" or len(p.text.split()) >= MIN_PARAGRAPH_WORDS or ends_sentence(p.text)
+            if p.kind in ("caption", "table") or len(p.text.split()) >= MIN_PARAGRAPH_WORDS or ends_sentence(p.text)
         ]
     # Пустой раздел оставляем, если за ним есть текст: «4 Experiments» → «4.1 Settings» → абзацы.
     sections = list(builder.sections)

@@ -5,10 +5,13 @@
 наблюдение, а не упадёт.
 """
 
+import hashlib
+import json
 import re
 from collections.abc import Callable
 from dataclasses import dataclass, field
 
+from research_assistant.agent import prompts  # модулем, а не именем: prompt_hash видит подмену промпта
 from research_assistant.ingest.models import PaperRecord
 from research_assistant.ingest.pipeline import search_sources
 from research_assistant.retrieval.papers import authors_of
@@ -72,9 +75,10 @@ def _format_passages(ctx: ToolContext, passages: list[dict], numbered: bool = Tr
             f"{head}passage p{p['id']} | paper {p['paper_id']}: \"{p['title']}\" ({p['year']}) | "
             f"section: {p['section'] or '-'} ({p['section_kind']}) | {where}"
         )
+        mark = "[table] " if p.get("kind") == "table" else ""  # строка таблицы: ячейки через « | »
         for sentence in sentences.get(p["id"], []):
             ctx.seen_sentences.add(sentence["id"])
-            blocks.append(f"  [s{sentence['id']}] {sentence['text']}")
+            blocks.append(f"  {mark}[s{sentence['id']}] {sentence['text']}")
     return "\n".join(blocks)
 
 
@@ -96,9 +100,12 @@ def search_library(ctx: ToolContext, query: str, k: int = 4, topic: str | None =
                           section_kinds=section_kinds or None, language=language, entity=entity,
                           paper_ids=[int(i) for i in paper_ids] if paper_ids else None)
     hits = ctx.searcher.search(query, k=k, mode="hybrid", where=where)
+    # Без эмбеддингов русский запрос почти не находит английские статьи: модели надо искать английскими словами.
+    note = ("[Semantic search is unavailable, keyword search only: use the words of the papers, "
+            "e.g. search English papers in English.]\n" if ctx.searcher.last_warning else "")
     if not hits:
-        return f'No passages found for "{query}". Try other words, English terms, or fewer filters.'
-    return f'Found {len(hits)} passages for "{query}":\n' + _format_passages(ctx, [h.passage for h in hits])
+        return note + f'No passages found for "{query}". Try other words, English terms, or fewer filters.'
+    return note + f'Found {len(hits)} passages for "{query}":\n' + _format_passages(ctx, [h.passage for h in hits])
 
 
 def _parse_id(raw, prefix: str) -> tuple[int, str | None]:
@@ -275,11 +282,14 @@ SCHEMAS = [
                     "topic": {"type": "string", "description": "Restrict to a library topic (see library_overview)."},
                     "section_kinds": {
                         "type": "array", "items": {"type": "string", "enum": SECTION_KINDS},
-                        "description": "Restrict to section types, e.g. ['limitations'] for drawbacks, ['results'] for numbers.",
+                        "description": ("Optional, usually leave empty: answers are most often in the abstract, "
+                                        "introduction or conclusion. Use only for a narrow follow-up search, "
+                                        "e.g. ['limitations'] for drawbacks."),
                     },
                     "year_from": {"type": "integer"},
                     "year_to": {"type": "integer"},
-                    "language": {"type": "string", "enum": ["en", "ru"], "description": "Language of the papers."},
+                    "language": {"type": "string", "enum": ["en", "ru"],
+                                 "description": "Only if the user asks for papers in one language; usually leave empty."},
                     "entity": {
                         "type": "string",
                         "description": "Only passages that mention this method/dataset/metric/task, e.g. 'MT-Bench' or 'EAGLE'.",
@@ -339,7 +349,8 @@ SCHEMAS = [
             "name": "read_passage",
             "description": (
                 "Read a passage together with its neighbouring passages from the same paper, when a search hit is "
-                "cut short or you need the surrounding context. Sentences come with ids like [s123]."
+                "cut off in the middle of the answer. Do not use it to re-read passages you already have. "
+                "Sentences come with ids like [s123]."
             ),
             "parameters": {
                 "type": "object",
@@ -510,3 +521,10 @@ def available_schemas(ctx: ToolContext) -> list[dict]:
     if ctx.add_papers_fn is None or not ctx.allow_add:
         hidden.add("add_papers")
     return [s for s in SCHEMAS if s["function"]["name"] not in hidden]
+
+
+def prompt_hash() -> str:
+    """Отпечаток системного промпта и схем инструментов: дообученная модель привязана к ним,
+    поэтому хеш пишется в журнал и в примеры для обучения — расхождение сразу видно."""
+    text = prompts.SYSTEM_PROMPT + json.dumps(SCHEMAS, sort_keys=True, ensure_ascii=False)
+    return hashlib.sha1(text.encode("utf-8")).hexdigest()

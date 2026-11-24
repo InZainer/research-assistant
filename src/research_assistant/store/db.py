@@ -333,10 +333,13 @@ class Library:
     def papers_to_parse(
         self, version: int, topic_id: int | None = None, paper_ids: list[int] | None = None, force: bool = False
     ) -> list[sqlite3.Row]:
-        """Статьи без разбора или разобранные старой версией парсера (или все при force)."""
+        """Статьи без разбора, разобранные старой версией парсера или разобранные по одной аннотации до того,
+        как скачался полный текст (или все при force)."""
         conditions, params = [], []
         if not force:
-            conditions.append("(r.paper_id IS NULL OR r.parser_version < ?)")
+            # Полный текст мог появиться позже разбора: ingest --retry-failed, add, параллельный сбор.
+            conditions.append("(r.paper_id IS NULL OR r.parser_version < ?"
+                              " OR (p.fulltext_status = 'ok' AND r.status IN ('metadata', 'empty')))")
             params.append(version)
         if topic_id is not None:
             conditions.append("p.id IN (SELECT paper_id FROM paper_topics WHERE topic_id = ?)")

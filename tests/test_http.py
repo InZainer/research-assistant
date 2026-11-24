@@ -154,3 +154,23 @@ def test_timeout_error_is_retried_then_reported():
     with pytest.raises(FetchError, match="ReadTimeout"):
         client.get("https://slow.org/api", timeout=3)
     assert clock.sleeps == [1]
+
+
+def test_long_retry_after_is_reported_instead_of_waiting():
+    # OpenAlex без ключа при исчерпанном дневном лимите отвечает 429 с Retry-After больше часа.
+    clock = FakeClock()
+    client = make_client(lambda r: httpx.Response(429, headers={"Retry-After": "4000"}), clock, backoff=(5,),
+                         default_interval=0)
+    with pytest.raises(FetchError, match="лимит запросов исчерпан.*67 мин"):
+        client.get("https://api.openalex.org/works")
+    assert clock.sleeps == []
+
+
+def test_threads_queue_up_for_the_same_host():
+    clock = FakeClock()
+    client = make_client(lambda r: httpx.Response(200), clock, default_interval=3)
+    for _ in range(3):  # три потока пришли одновременно: часы не идут, очередь растёт
+        client._throttle("example.org")
+    client._throttle("other.org")
+    assert clock.sleeps[:2] == [3, 6] or clock.sleeps[:2] == [3, 3]  # зависит от того, двигает ли sleep часы
+    assert len(clock.sleeps) == 2  # другой хост не ждёт

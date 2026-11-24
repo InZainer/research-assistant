@@ -1,18 +1,18 @@
 {
  "$schema": "nexus-mapper/concept-model/v1",
- "generated_at": "2026-10-22T14:38:53Z",
- "repo_path": "C:/Users/Azuz/Desktop/SFEDU_MASTERS/Urushkin_NLP/research-assistant",
+ "generated_at": "2026-11-24T12:15:25Z",
+ "repo_path": "C:/Users/Windows/Desktop/Prog/research-assistant",
  "generator": "nexus-mapper v2",
  "nodes": [
   {
    "id": "ra.domain-library-filling",
    "type": "Domain",
    "label": "Наполнение библиотеки",
-   "responsibility": "Сбор статей, разбор полных текстов и разметка: превращает тему в размеченную библиотеку фрагментов и предложений",
+   "responsibility": "Сбор статей, разбор полных текстов и разметка: тема → размеченная библиотека фрагментов и предложений",
    "implementation_status": "inferred",
    "code_path": null,
    "evidence_path": "PLAN.md",
-   "evidence_gap": "концептуальная группировка из PLAN.md: отдельного каталога домена в коде нет, системы лежат в своих пакетах",
+   "evidence_gap": "концептуальная группировка из PLAN.md/docs: отдельного каталога домена в коде нет, системы лежат в своих пакетах",
    "tech_stack": [],
    "related_reqs": [],
    "complexity": "medium",
@@ -22,11 +22,11 @@
    "id": "ra.domain-storage-search",
    "type": "Domain",
    "label": "Хранилище и поиск",
-   "responsibility": "SQLite-библиотека с FTS5 и векторами плюс гибридный поиск по ней",
+   "responsibility": "SQLite-библиотека с FTS5 и векторами, гибридный поиск фрагментов и поиск статей целиком",
    "implementation_status": "inferred",
    "code_path": null,
    "evidence_path": "PLAN.md",
-   "evidence_gap": "концептуальная группировка из PLAN.md: отдельного каталога домена в коде нет, системы лежат в своих пакетах",
+   "evidence_gap": "концептуальная группировка из PLAN.md/docs: отдельного каталога домена в коде нет, системы лежат в своих пакетах",
    "tech_stack": [],
    "related_reqs": [],
    "complexity": "medium",
@@ -36,11 +36,11 @@
    "id": "ra.domain-answering",
    "type": "Domain",
    "label": "Ответы с цитатами",
-   "responsibility": "Агентный цикл и цитирование по ID предложений: вопрос пользователя → ответ с дословными цитатами",
+   "responsibility": "Агентный цикл, цитаты по ID предложений и интерфейсы к нему: CLI ask/chat и веб-интерфейс",
    "implementation_status": "inferred",
    "code_path": null,
    "evidence_path": "PLAN.md",
-   "evidence_gap": "концептуальная группировка из PLAN.md: отдельного каталога домена в коде нет, системы лежат в своих пакетах",
+   "evidence_gap": "концептуальная группировка из PLAN.md/docs: отдельного каталога домена в коде нет, системы лежат в своих пакетах",
    "tech_stack": [],
    "related_reqs": [],
    "complexity": "medium",
@@ -50,11 +50,25 @@
    "id": "ra.domain-quality",
    "type": "Domain",
    "label": "Оценка качества",
-   "responsibility": "Золотые наборы и метрики поиска, разметки и агента; журнал экспериментов",
+   "responsibility": "Метрики поиска, разметки и агента, включая метрики поведения по журналам прогонов",
    "implementation_status": "inferred",
    "code_path": null,
    "evidence_path": "docs/experiments.md",
-   "evidence_gap": "концептуальная группировка из PLAN.md: отдельного каталога домена в коде нет, системы лежат в своих пакетах",
+   "evidence_gap": "концептуальная группировка из PLAN.md/docs: отдельного каталога домена в коде нет, системы лежат в своих пакетах",
+   "tech_stack": [],
+   "related_reqs": [],
+   "complexity": "medium",
+   "hotspot": false
+  },
+  {
+   "id": "ra.domain-distillation",
+   "type": "Domain",
+   "label": "Дообучение локальной модели",
+   "responsibility": "Дистилляция агента Mercury 3 в Qwen3.5-4B: вопросы, траектории учителя, SFT, обучение на RTX 5070",
+   "implementation_status": "inferred",
+   "code_path": null,
+   "evidence_path": "docs/finetune.md",
+   "evidence_gap": "группировка по docs/finetune.md; код в пакете finetune/ и вне пакета в scripts/; в git не закоммичено",
    "tech_stack": [],
    "related_reqs": [],
    "complexity": "medium",
@@ -64,7 +78,7 @@
    "id": "ra.ingest",
    "type": "System",
    "label": "Сбор статей",
-   "responsibility": "Поиск в OpenAlex/arXiv, слияние дублей, HTTP с паузами и кэшем, robots.txt, скачивание PDF и страниц CyberLeninka",
+   "responsibility": "Сбор: OpenAlex и arXiv по набору запросов, фильтр по словам темы, add по DOI или ссылке, полные тексты",
    "implementation_status": "implemented",
    "code_path": "src/research_assistant/ingest/",
    "evidence_path": null,
@@ -82,7 +96,7 @@
    "id": "ra.parse",
    "type": "System",
    "label": "Разбор полных текстов",
-   "responsibility": "PDF (PyMuPDF) и HTML CyberLeninka → разделы с типом → фрагменты → предложения с позициями и страницами",
+   "responsibility": "Разбор PDF/HTML до разделов, фрагментов и предложений со страницами; таблицы с числами (PARSER_VERSION 2)",
    "implementation_status": "implemented",
    "code_path": "src/research_assistant/parse/",
    "evidence_path": null,
@@ -100,7 +114,7 @@
    "id": "ra.annotation",
    "type": "System",
    "label": "Разметка статей",
-   "responsibility": "Сущности (метод/датасет/метрика/задача) чат-моделью с проверкой по тексту и ключевые слова YAKE",
+   "responsibility": "Сущности моделью с проверкой по тексту и ключевые слова YAKE; ANNOTATOR_VERSION",
    "implementation_status": "implemented",
    "code_path": "src/research_assistant/nlp/annotate.py",
    "evidence_path": null,
@@ -118,7 +132,7 @@
    "id": "ra.store",
    "type": "System",
    "label": "Хранилище библиотеки",
-   "responsibility": "SQLite: статьи, темы, разделы, фрагменты, предложения, разметка, FTS5 по основам слов; векторы в .npz",
+   "responsibility": "SQLite Library: схема, upsert со слиянием, FTS5, сущности, фильтры; векторы .npz",
    "implementation_status": "implemented",
    "code_path": "src/research_assistant/store/",
    "evidence_path": null,
@@ -130,13 +144,13 @@
    ],
    "related_reqs": [],
    "complexity": "high",
-   "hotspot": false
+   "hotspot": true
   },
   {
    "id": "ra.retrieval",
    "type": "System",
    "label": "Поиск",
-   "responsibility": "BM25 (FTS5), плотный поиск по эмбеддингам, слияние RRF, перевод запроса и listwise-реранкер",
+   "responsibility": "Гибрид BM25 + плотный + RRF с откатом на BM25, перевод запроса, реранкер, поиск статей",
    "implementation_status": "implemented",
    "code_path": "src/research_assistant/retrieval/",
    "evidence_path": null,
@@ -153,7 +167,7 @@
    "id": "ra.agent",
    "type": "System",
    "label": "Агент",
-   "responsibility": "Свой цикл модель → инструменты → наблюдения, бюджет шагов, журнал JSONL, ответ с цитатами по ID предложений",
+   "responsibility": "Свой цикл с инструментами, бюджет, prefetch; чтение статьи целиком (read) и новизна (coverage); цитаты по ID",
    "implementation_status": "implemented",
    "code_path": "src/research_assistant/agent/",
    "evidence_path": null,
@@ -163,13 +177,13 @@
    ],
    "related_reqs": [],
    "complexity": "high",
-   "hotspot": false
+   "hotspot": true
   },
   {
    "id": "ra.evaluation",
    "type": "System",
    "label": "Оценка",
-   "responsibility": "Recall/MRR/nDCG поиска, P/R/F1 разметки, pass@1/pass^k агента с интервалом Вильсона, пересчёт по журналам",
+   "responsibility": "Recall/MRR/nDCG поиска, P/R/F1 разметки, pass@k агента и метрики поведения, --rescore",
    "implementation_status": "implemented",
    "code_path": "src/research_assistant/evaluation/",
    "evidence_path": null,
@@ -178,14 +192,14 @@
     "python"
    ],
    "related_reqs": [],
-   "complexity": "medium",
+   "complexity": "high",
    "hotspot": false
   },
   {
    "id": "ra.cli",
    "type": "System",
    "label": "Командная строка",
-   "responsibility": "Точка входа research-assistant: все команды от ingest до eval-agent; зависит почти от всех систем",
+   "responsibility": "Командная строка (20 команд + ft-*), настройки .env и профили провайдеров модели (providers.py)",
    "implementation_status": "implemented",
    "code_path": "src/research_assistant/cli.py",
    "evidence_path": null,
@@ -198,10 +212,80 @@
    "hotspot": true
   },
   {
+   "id": "ra.ui",
+   "type": "System",
+   "label": "Веб-интерфейс",
+   "responsibility": "Streamlit: вопрос агенту с карточками цитат, поиск, библиотека, история чатов в data/chats",
+   "implementation_status": "implemented",
+   "code_path": "src/research_assistant/ui/",
+   "evidence_path": null,
+   "evidence_gap": null,
+   "tech_stack": [
+    "streamlit"
+   ],
+   "related_reqs": [],
+   "complexity": "medium",
+   "hotspot": false
+  },
+  {
+   "id": "ra.finetune",
+   "type": "System",
+   "label": "Датасет дообучения",
+   "responsibility": "Сплит по статьям, синтез вопросов учителем, траектории, отсев и экспорт SFT с масками потерь",
+   "implementation_status": "implemented",
+   "code_path": "src/research_assistant/finetune/",
+   "evidence_path": null,
+   "evidence_gap": null,
+   "tech_stack": [
+    "jinja2",
+    "openai"
+   ],
+   "related_reqs": [],
+   "complexity": "high",
+   "hotspot": false
+  },
+  {
+   "id": "ra.train-bundle",
+   "type": "System",
+   "label": "Обучение и комплект RTX 5070",
+   "responsibility": "Вне пакета: LoRA SFT (unsloth), сборка zip-комплекта для ПК с RTX 5070, GGUF, Colab",
+   "implementation_status": "implemented",
+   "code_path": "scripts/",
+   "evidence_path": null,
+   "evidence_gap": null,
+   "tech_stack": [
+    "torch",
+    "unsloth",
+    "transformers",
+    "bash",
+    "llama.cpp"
+   ],
+   "related_reqs": [],
+   "complexity": "high",
+   "hotspot": false
+  },
+  {
+   "id": "ra.mcp",
+   "type": "System",
+   "label": "MCP для внешних агентов",
+   "responsibility": "MCP-сервер stdio без SDK: инструменты библиотеки и cite для Claude Code, Hermes, Codex; навык SKILL.md",
+   "implementation_status": "implemented",
+   "code_path": "src/research_assistant/mcp_server.py",
+   "evidence_path": null,
+   "evidence_gap": null,
+   "tech_stack": [
+    "json-rpc",
+    "mcp"
+   ],
+   "related_reqs": [],
+   "complexity": "medium",
+   "hotspot": false
+  },
+  {
    "id": "ra.core-text",
    "type": "Module",
    "label": "Анализатор текста",
-   "responsibility": "Токены, стоп-слова, основы Snowball (en/ru), определение языка — общий фундамент поиска, хранилища и разметки",
+   "responsibility": "Токены, стоп-слова, основы Snowball en/ru, detect_language; общий для FTS5, сущностей, сплитов",
    "implementation_status": "implemented",
    "code_path": "src/research_assistant/nlp/text.py",
    "evidence_path": null,
@@ -217,7 +301,7 @@
    "id": "ra.core-models",
    "type": "Module",
    "label": "Модель статьи PaperRecord",
-   "responsibility": "Доменная запись статьи и нормализация DOI/arXiv/заголовка; лежит в ingest, но используется 18 модулями",
+   "responsibility": "PaperRecord, нормализация DOI/arXiv/заголовка, author_matches; 28 импортёров",
    "implementation_status": "implemented",
    "code_path": "src/research_assistant/ingest/models.py",
    "evidence_path": null,
@@ -231,7 +315,7 @@
    "id": "ra.core-config",
    "type": "Module",
    "label": "Настройки",
-   "responsibility": "Settings из .env: модель, эмбеддинги, пути, лимит шагов, reasoning_effort",
+   "responsibility": "Settings из .env: чат-модель, эмбеддинги (отдельный base_url), MAX_STEPS, reasoning_effort",
    "implementation_status": "implemented",
    "code_path": "src/research_assistant/config.py",
    "evidence_path": null,
@@ -247,7 +331,7 @@
    "id": "ra.core-llm",
    "type": "Module",
    "label": "Клиент чат-модели",
-   "responsibility": "ChatModel поверх OpenAI-совместимого API и учёт токенов Usage",
+   "responsibility": "ChatModel и Usage поверх OpenAI-совместимого API (LM Studio локально или Mercury 3 в облаке)",
    "implementation_status": "implemented",
    "code_path": "src/research_assistant/llm.py",
    "evidence_path": null,
@@ -263,7 +347,7 @@
    "id": "ra.agent-session",
    "type": "Module",
    "label": "Сборка агента",
-   "responsibility": "Точка сборки: Searcher, внешние источники, добавление статей; используется CLI для search/ask/chat/eval-agent",
+   "responsibility": "make_searcher, make_agent, make_add_papers: точка сборки для CLI, UI и ft-collect",
    "implementation_status": "implemented",
    "code_path": "src/research_assistant/agent/session.py",
    "evidence_path": null,
@@ -277,7 +361,7 @@
    "id": "ra.agent-loop",
    "type": "Module",
    "label": "Агентный цикл",
-   "responsibility": "run_agent: лимит шагов, ошибки как наблюдения, prefetch/single_shot/quotes, проверка final_answer",
+   "responsibility": "run_agent: шаги, nudges, бюджет, REPEATED_CALL, error_kind в журнале, messages для траекторий",
    "implementation_status": "implemented",
    "code_path": "src/research_assistant/agent/loop.py",
    "evidence_path": null,
@@ -291,21 +375,35 @@
    "id": "ra.agent-tools",
    "type": "Module",
    "label": "Инструменты агента",
-   "responsibility": "search_library, read_passage, library_overview, list_entities, compare_papers, search_external, add_papers",
+   "responsibility": "8 инструментов + final_answer, SCHEMAS, prompt_hash; заметка об откате поиска на BM25",
    "implementation_status": "implemented",
    "code_path": "src/research_assistant/agent/tools.py",
    "evidence_path": null,
    "evidence_gap": null,
    "tech_stack": [],
    "related_reqs": [],
-   "complexity": "medium",
+   "complexity": "high",
+   "hotspot": false
+  },
+  {
+   "id": "ra.agent-prompts",
+   "type": "Module",
+   "label": "Системный промпт",
+   "responsibility": "SYSTEM_PROMPT (8 правил после разбора E5) и NUDGE_FINAL_ANSWER; контракт с обученной моделью",
+   "implementation_status": "implemented",
+   "code_path": "src/research_assistant/agent/prompts.py",
+   "evidence_path": null,
+   "evidence_gap": null,
+   "tech_stack": [],
+   "related_reqs": [],
+   "complexity": "low",
    "hotspot": false
   },
   {
    "id": "ra.answer-citations",
    "type": "Module",
    "label": "Цитаты по ID",
-   "responsibility": "Текст цитаты, статья, раздел и страница по ID предложения; разбор форм s123/[s123]",
+   "responsibility": "Загрузка и формат цитат по ID предложений; текст подставляет код",
    "implementation_status": "implemented",
    "code_path": "src/research_assistant/answer/citations.py",
    "evidence_path": null,
@@ -319,7 +417,7 @@
    "id": "ra.store-db",
    "type": "Module",
    "label": "Library (SQLite)",
-   "responsibility": "Схема, upsert со слиянием, разбор/разметка/FTS в одной транзакции, фильтры PassageFilter",
+   "responsibility": "Схема, upsert, save_structure в одной транзакции, search_fts, PassageFilter; 31 импортёр",
    "implementation_status": "implemented",
    "code_path": "src/research_assistant/store/db.py",
    "evidence_path": null,
@@ -333,7 +431,7 @@
    "id": "ra.parse-structure",
    "type": "Module",
    "label": "Сборка структуры документа",
-   "responsibility": "Заголовки, шапка статьи, литература и приложения, склейка абзацев, снятие переносов",
+   "responsibility": "Заголовки, шапка, литература, склейка абзацев, статьи внутри сборников",
    "implementation_status": "implemented",
    "code_path": "src/research_assistant/parse/structure.py",
    "evidence_path": null,
@@ -347,7 +445,7 @@
    "id": "ra.nlp-entities",
    "type": "Module",
    "label": "Извлечение сущностей",
-   "responsibility": "Промпт и JSON-схема, проверка по тексту через основы слов; здесь же общие contains_stems и parse_json",
+   "responsibility": "Промпт и проверка сущностей по тексту; общие утилиты contains_stems и parse_json",
    "implementation_status": "implemented",
    "code_path": "src/research_assistant/nlp/entities.py",
    "evidence_path": null,
@@ -361,7 +459,7 @@
    "id": "ra.nlp-embed",
    "type": "Module",
    "label": "Клиент эмбеддингов",
-   "responsibility": "OpenAIEmbedder: батчи к /v1/embeddings, префиксы запроса/документа для nomic/e5/qwen3-embedding",
+   "responsibility": "OpenAIEmbedder с префиксами моделей; без повторов для локального сервера",
    "implementation_status": "implemented",
    "code_path": "src/research_assistant/nlp/embed.py",
    "evidence_path": null,
@@ -372,10 +470,52 @@
    "hotspot": false
   },
   {
+   "id": "ra.retrieval-search",
+   "type": "Module",
+   "label": "Searcher",
+   "responsibility": "search(mode, translate, rerank), RRF; при сбое эмбеддингов — BM25 и last_warning",
+   "implementation_status": "implemented",
+   "code_path": "src/research_assistant/retrieval/search.py",
+   "evidence_path": null,
+   "evidence_gap": null,
+   "tech_stack": [],
+   "related_reqs": [],
+   "complexity": "medium",
+   "hotspot": false
+  },
+  {
+   "id": "ra.retrieval-papers",
+   "type": "Module",
+   "label": "Поиск статей",
+   "responsibility": "find_papers: по автору, по словам названия и аннотации, по смыслу аннотации",
+   "implementation_status": "implemented",
+   "code_path": "src/research_assistant/retrieval/papers.py",
+   "evidence_path": null,
+   "evidence_gap": null,
+   "tech_stack": [],
+   "related_reqs": [],
+   "complexity": "low",
+   "hotspot": false
+  },
+  {
+   "id": "ra.eval-agent",
+   "type": "Module",
+   "label": "Оценка агента",
+   "responsibility": "score_run, journal_metrics (поведение), pass@1 + Вильсон, pass^k, rescore_log по qid",
+   "implementation_status": "implemented",
+   "code_path": "src/research_assistant/evaluation/agent.py",
+   "evidence_path": null,
+   "evidence_gap": null,
+   "tech_stack": [],
+   "related_reqs": [],
+   "complexity": "high",
+   "hotspot": false
+  },
+  {
    "id": "ra.eval-data",
    "type": "Module",
    "label": "Золотые наборы",
-   "responsibility": "retrieval_gold.jsonl (30 вопросов), entities_gold.jsonl (30 аннотаций), скрипт перевода запросов",
+   "responsibility": "retrieval_gold.jsonl (30 вопросов, источник test-сплита), entities_gold.jsonl",
    "implementation_status": "implemented",
    "code_path": "eval/",
    "evidence_path": null,
@@ -386,247 +526,324 @@
    "related_reqs": [],
    "complexity": "low",
    "hotspot": false
+  },
+  {
+   "id": "ra.ui-views",
+   "type": "Module",
+   "label": "Логика страниц UI",
+   "responsibility": "Данные для страниц без Streamlit: карточки цитат, контекст, описание шагов агента",
+   "implementation_status": "implemented",
+   "code_path": "src/research_assistant/ui/views.py",
+   "evidence_path": null,
+   "evidence_gap": null,
+   "tech_stack": [],
+   "related_reqs": [],
+   "complexity": "medium",
+   "hotspot": false
+  },
+  {
+   "id": "ra.ui-app",
+   "type": "Module",
+   "label": "Страница Streamlit",
+   "responsibility": "Три раздела UI; агент через session.make_agent с prefetch и on_event; без прямых тестов",
+   "implementation_status": "implemented",
+   "code_path": "src/research_assistant/ui/app.py",
+   "evidence_path": null,
+   "evidence_gap": null,
+   "tech_stack": [
+    "streamlit"
+   ],
+   "related_reqs": [],
+   "complexity": "medium",
+   "hotspot": false
+  },
+  {
+   "id": "ra.ui-chats",
+   "type": "Module",
+   "label": "История чатов",
+   "responsibility": "ChatStore: чат = JSON в data/chats/, память агента из сохранённых ответов",
+   "implementation_status": "implemented",
+   "code_path": "src/research_assistant/ui/chats.py",
+   "evidence_path": null,
+   "evidence_gap": null,
+   "tech_stack": [],
+   "related_reqs": [],
+   "complexity": "low",
+   "hotspot": false
+  },
+  {
+   "id": "ra.ft-splits",
+   "type": "Module",
+   "label": "Сплит статей",
+   "responsibility": "test = статьи золота, val ≈ 6 статей (стратификация), train — остальное; Жаккар почти-дублей",
+   "implementation_status": "implemented",
+   "code_path": "src/research_assistant/finetune/splits.py",
+   "evidence_path": null,
+   "evidence_gap": null,
+   "tech_stack": [],
+   "related_reqs": [],
+   "complexity": "low",
+   "hotspot": false
+  },
+  {
+   "id": "ra.ft-questions",
+   "type": "Module",
+   "label": "Синтез вопросов",
+   "responsibility": "Учитель пишет вопросы по фрагментам с [s<id>], код собирает золото; проверки и reasons",
+   "implementation_status": "implemented",
+   "code_path": "src/research_assistant/finetune/questions.py",
+   "evidence_path": null,
+   "evidence_gap": null,
+   "tech_stack": [
+    "openai"
+   ],
+   "related_reqs": [],
+   "complexity": "high",
+   "hotspot": false
+  },
+  {
+   "id": "ra.ft-trajectories",
+   "type": "Module",
+   "label": "Траектории учителя",
+   "responsibility": "collect через run_agent(prefetch), отказ при localhost-учителе, accept() — rejection sampling",
+   "implementation_status": "implemented",
+   "code_path": "src/research_assistant/finetune/trajectories.py",
+   "evidence_path": null,
+   "evidence_gap": null,
+   "tech_stack": [],
+   "related_reqs": [],
+   "complexity": "high",
+   "hotspot": false
+  },
+  {
+   "id": "ra.ft-export",
+   "type": "Module",
+   "label": "Экспорт SFT",
+   "responsibility": "Рендер чат-шаблоном GGUF (jinja2 sandbox), train_spans по ходам ассистента, валидация",
+   "implementation_status": "implemented",
+   "code_path": "src/research_assistant/finetune/export.py",
+   "evidence_path": null,
+   "evidence_gap": null,
+   "tech_stack": [
+    "jinja2"
+   ],
+   "related_reqs": [],
+   "complexity": "high",
+   "hotspot": false
+  },
+  {
+   "id": "ra.ft-commands",
+   "type": "Module",
+   "label": "Команды ft-*",
+   "responsibility": "ft-split, ft-questions, ft-collect, ft-export; вынесены из cli.py",
+   "implementation_status": "implemented",
+   "code_path": "src/research_assistant/finetune/commands.py",
+   "evidence_path": null,
+   "evidence_gap": null,
+   "tech_stack": [
+    "argparse"
+   ],
+   "related_reqs": [],
+   "complexity": "low",
+   "hotspot": false
+  },
+  {
+   "id": "ra.ft-template",
+   "type": "Module",
+   "label": "Чат-шаблон Qwen3.5",
+   "responsibility": "Шаблон из Qwen3.5-4B-Q4_K_M.gguf: общий для экспорта, обучения и сверки GGUF",
+   "implementation_status": "implemented",
+   "code_path": "src/research_assistant/finetune/qwen3_5_chat_template.jinja",
+   "evidence_path": null,
+   "evidence_gap": null,
+   "tech_stack": [
+    "jinja2"
+   ],
+   "related_reqs": [],
+   "complexity": "low",
+   "hotspot": false
+  },
+  {
+   "id": "ra.train-sft",
+   "type": "Module",
+   "label": "Скрипт LoRA SFT",
+   "responsibility": "train_sft.py: labels по train_spans, LoRA на attention/DeltaNet/MLP, слияние, проверка GGUF",
+   "implementation_status": "implemented",
+   "code_path": "scripts/train_sft.py",
+   "evidence_path": null,
+   "evidence_gap": null,
+   "tech_stack": [
+    "torch",
+    "unsloth",
+    "transformers"
+   ],
+   "related_reqs": [],
+   "complexity": "high",
+   "hotspot": false
+  },
+  {
+   "id": "ra.make-bundle",
+   "type": "Module",
+   "label": "Сборщик комплекта",
+   "responsibility": "make_train_bundle.py: dist/rtx5070_train_bundle + .zip, MANIFEST sha256, проверка секретов",
+   "implementation_status": "implemented",
+   "code_path": "scripts/make_train_bundle.py",
+   "evidence_path": null,
+   "evidence_gap": null,
+   "tech_stack": [
+    "zipfile"
+   ],
+   "related_reqs": [],
+   "complexity": "medium",
+   "hotspot": false
+  },
+  {
+   "id": "ra.bundle-templates",
+   "type": "Module",
+   "label": "Файлы комплекта",
+   "responsibility": "README_RTX5070.md, setup_wsl/smoke/train_full/convert_gguf.sh, verify_bundle, bundle_tools",
+   "implementation_status": "implemented",
+   "code_path": "scripts/train_bundle/",
+   "evidence_path": null,
+   "evidence_gap": null,
+   "tech_stack": [
+    "bash",
+    "python"
+   ],
+   "related_reqs": [],
+   "complexity": "medium",
+   "hotspot": false
+  },
+  {
+   "id": "ra.colab-notebook",
+   "type": "Module",
+   "label": "Ноутбук Colab",
+   "responsibility": "Пробный запуск обучения на Colab T4 (float32); не разбирается AST",
+   "implementation_status": "implemented",
+   "code_path": "notebooks/finetune_qwen35_colab.ipynb",
+   "evidence_path": null,
+   "evidence_gap": null,
+   "tech_stack": [
+    "jupyter"
+   ],
+   "related_reqs": [],
+   "complexity": "low",
+   "hotspot": false
+  },
+  {
+   "id": "ra.mcp-server",
+   "type": "Module",
+   "label": "mcp_server",
+   "responsibility": "McpServer, serve, build_server, cite: протокол MCP и уровни доступа",
+   "implementation_status": "implemented",
+   "code_path": "src/research_assistant/mcp_server.py",
+   "evidence_path": null,
+   "evidence_gap": null,
+   "tech_stack": [],
+   "related_reqs": [],
+   "complexity": "medium",
+   "hotspot": false
+  },
+  {
+   "id": "ra.skill-research-library",
+   "type": "Module",
+   "label": "SKILL.md",
+   "responsibility": "Навык для внешних агентов: порядок вызовов и правила цитирования",
+   "implementation_status": "implemented",
+   "code_path": "skills/research-library/SKILL.md",
+   "evidence_path": null,
+   "evidence_gap": null,
+   "tech_stack": [],
+   "related_reqs": [],
+   "complexity": "medium",
+   "hotspot": false
+  },
+  {
+   "id": "ra.core-providers",
+   "type": "Module",
+   "label": "providers",
+   "responsibility": "Профили AI-сервисов LLM_PROVIDER: адрес, ключ, модель по умолчанию",
+   "implementation_status": "implemented",
+   "code_path": "src/research_assistant/providers.py",
+   "evidence_path": null,
+   "evidence_gap": null,
+   "tech_stack": [],
+   "related_reqs": [],
+   "complexity": "medium",
+   "hotspot": false
+  },
+  {
+   "id": "ra.agent-reading",
+   "type": "Module",
+   "label": "reading",
+   "responsibility": "read_paper: статья целиком окнами, находки, чего нет, расхождения",
+   "implementation_status": "implemented",
+   "code_path": "src/research_assistant/agent/reading.py",
+   "evidence_path": null,
+   "evidence_gap": null,
+   "tech_stack": [],
+   "related_reqs": [],
+   "complexity": "medium",
+   "hotspot": false
+  },
+  {
+   "id": "ra.agent-coverage",
+   "type": "Module",
+   "label": "coverage",
+   "responsibility": "check_coverage: вердикт yes/partial/no по каждой статье темы",
+   "implementation_status": "implemented",
+   "code_path": "src/research_assistant/agent/coverage.py",
+   "evidence_path": null,
+   "evidence_gap": null,
+   "tech_stack": [],
+   "related_reqs": [],
+   "complexity": "medium",
+   "hotspot": false
+  },
+  {
+   "id": "ra.ingest-resolve",
+   "type": "Module",
+   "label": "resolve",
+   "responsibility": "resolve_reference: DOI, arXiv или адрес страницы в PaperRecord",
+   "implementation_status": "implemented",
+   "code_path": "src/research_assistant/ingest/resolve.py",
+   "evidence_path": null,
+   "evidence_gap": null,
+   "tech_stack": [],
+   "related_reqs": [],
+   "complexity": "medium",
+   "hotspot": false
+  },
+  {
+   "id": "ra.ingest-landing",
+   "type": "Module",
+   "label": "landing",
+   "responsibility": "Метатеги страницы статьи: ссылка на PDF и запись статьи",
+   "implementation_status": "implemented",
+   "code_path": "src/research_assistant/ingest/landing.py",
+   "evidence_path": null,
+   "evidence_gap": null,
+   "tech_stack": [],
+   "related_reqs": [],
+   "complexity": "medium",
+   "hotspot": false
+  },
+  {
+   "id": "ra.ingest-relevance",
+   "type": "Module",
+   "label": "relevance",
+   "responsibility": "TermFilter: группы слов темы по основам (флаг --require)",
+   "implementation_status": "implemented",
+   "code_path": "src/research_assistant/ingest/relevance.py",
+   "evidence_path": null,
+   "evidence_gap": null,
+   "tech_stack": [],
+   "related_reqs": [],
+   "complexity": "medium",
+   "hotspot": false
   }
  ],
  "edges": [
-  {
-   "source": "ra.domain-library-filling",
-   "target": "ra.ingest",
-   "type": "contains"
-  },
-  {
-   "source": "ra.domain-library-filling",
-   "target": "ra.parse",
-   "type": "contains"
-  },
-  {
-   "source": "ra.domain-library-filling",
-   "target": "ra.annotation",
-   "type": "contains"
-  },
-  {
-   "source": "ra.domain-storage-search",
-   "target": "ra.store",
-   "type": "contains"
-  },
-  {
-   "source": "ra.domain-storage-search",
-   "target": "ra.retrieval",
-   "type": "contains"
-  },
-  {
-   "source": "ra.domain-answering",
-   "target": "ra.agent",
-   "type": "contains"
-  },
-  {
-   "source": "ra.domain-quality",
-   "target": "ra.evaluation",
-   "type": "contains"
-  },
-  {
-   "source": "ra.ingest",
-   "target": "ra.core-models",
-   "type": "contains"
-  },
-  {
-   "source": "ra.annotation",
-   "target": "ra.nlp-entities",
-   "type": "contains"
-  },
-  {
-   "source": "ra.annotation",
-   "target": "ra.core-text",
-   "type": "contains"
-  },
-  {
-   "source": "ra.store",
-   "target": "ra.store-db",
-   "type": "contains"
-  },
-  {
-   "source": "ra.retrieval",
-   "target": "ra.nlp-embed",
-   "type": "contains"
-  },
-  {
-   "source": "ra.parse",
-   "target": "ra.parse-structure",
-   "type": "contains"
-  },
-  {
-   "source": "ra.agent",
-   "target": "ra.agent-session",
-   "type": "contains"
-  },
-  {
-   "source": "ra.agent",
-   "target": "ra.agent-loop",
-   "type": "contains"
-  },
-  {
-   "source": "ra.agent",
-   "target": "ra.agent-tools",
-   "type": "contains"
-  },
-  {
-   "source": "ra.agent",
-   "target": "ra.answer-citations",
-   "type": "contains"
-  },
-  {
-   "source": "ra.agent",
-   "target": "ra.core-llm",
-   "type": "contains"
-  },
-  {
-   "source": "ra.cli",
-   "target": "ra.core-config",
-   "type": "contains"
-  },
-  {
-   "source": "ra.evaluation",
-   "target": "ra.eval-data",
-   "type": "contains"
-  },
-  {
-   "source": "ra.cli",
-   "target": "ra.store",
-   "type": "depends_on",
-   "description": "14 импортов: почти каждая команда открывает Library"
-  },
-  {
-   "source": "ra.cli",
-   "target": "ra.ingest",
-   "type": "depends_on",
-   "description": "команда ingest"
-  },
-  {
-   "source": "ra.cli",
-   "target": "ra.evaluation",
-   "type": "depends_on",
-   "description": "eval-retrieval, eval-entities, eval-agent"
-  },
-  {
-   "source": "ra.cli",
-   "target": "ra.agent",
-   "type": "depends_on",
-   "description": "ask, chat, eval-agent через agent/session.py"
-  },
-  {
-   "source": "ra.cli",
-   "target": "ra.parse",
-   "type": "depends_on",
-   "description": "parse, show, ingest"
-  },
-  {
-   "source": "ra.cli",
-   "target": "ra.annotation",
-   "type": "depends_on",
-   "description": "annotate, ingest --annotate"
-  },
-  {
-   "source": "ra.cli",
-   "target": "ra.retrieval",
-   "type": "depends_on",
-   "description": "search, index"
-  },
-  {
-   "source": "ra.agent",
-   "target": "ra.retrieval",
-   "type": "depends_on",
-   "description": "search_library, compare_papers"
-  },
-  {
-   "source": "ra.agent",
-   "target": "ra.store",
-   "type": "depends_on",
-   "description": "Library, PassageFilter"
-  },
-  {
-   "source": "ra.agent",
-   "target": "ra.ingest",
-   "type": "depends_on",
-   "description": "search_external, add_papers"
-  },
-  {
-   "source": "ra.agent",
-   "target": "ra.parse",
-   "type": "depends_on",
-   "description": "add_papers разбирает новые статьи (session.py)"
-  },
-  {
-   "source": "ra.agent",
-   "target": "ra.annotation",
-   "type": "depends_on",
-   "description": "add_papers размечает новые статьи (session.py)"
-  },
-  {
-   "source": "ra.retrieval",
-   "target": "ra.store",
-   "type": "depends_on",
-   "description": "search_fts, passages_by_ids, VectorIndex"
-  },
-  {
-   "source": "ra.retrieval",
-   "target": "ra.nlp-entities",
-   "type": "depends_on",
-   "description": "rerank.py берёт parse_json"
-  },
-  {
-   "source": "ra.annotation",
-   "target": "ra.store",
-   "type": "depends_on",
-   "description": "save_annotation"
-  },
-  {
-   "source": "ra.ingest",
-   "target": "ra.store",
-   "type": "depends_on",
-   "description": "ingest/pipeline.py пишет в Library"
-  },
-  {
-   "source": "ra.parse",
-   "target": "ra.store",
-   "type": "depends_on",
-   "description": "parse/pipeline.py пишет save_structure"
-  },
-  {
-   "source": "ra.store",
-   "target": "ra.core-text",
-   "type": "depends_on",
-   "description": "analyze для FTS5 и ключей сущностей"
-  },
-  {
-   "source": "ra.store",
-   "target": "ra.nlp-entities",
-   "type": "depends_on",
-   "description": "ленивый импорт contains_stems в _link_mentions"
-  },
-  {
-   "source": "ra.store",
-   "target": "ra.core-models",
-   "type": "depends_on",
-   "description": "upsert PaperRecord"
-  },
-  {
-   "source": "ra.evaluation",
-   "target": "ra.agent",
-   "type": "depends_on",
-   "description": "run_agent и восстановление результатов из журнала"
-  },
-  {
-   "source": "ra.evaluation",
-   "target": "ra.store",
-   "type": "depends_on",
-   "description": "resolve золотых цитат"
-  },
-  {
-   "source": "ra.evaluation",
-   "target": "ra.annotation",
-   "type": "depends_on",
-   "description": "extract_entities"
-  },
   {
    "source": "eval.translate_queries",
    "target": "src.research_assistant.config",
@@ -653,6 +870,36 @@
    "type": "imports"
   },
   {
+   "source": "src.research_assistant.agent.coverage",
+   "target": "src.research_assistant.agent.loop",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.agent.coverage",
+   "target": "src.research_assistant.answer.citations",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.agent.coverage",
+   "target": "src.research_assistant.llm",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.agent.coverage",
+   "target": "src.research_assistant.nlp.text",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.agent.coverage",
+   "target": "src.research_assistant.retrieval.search",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.agent.coverage",
+   "target": "src.research_assistant.store.db",
+   "type": "imports"
+  },
+  {
    "source": "src.research_assistant.agent.loop",
    "target": "src.research_assistant.agent.prompts",
    "type": "imports"
@@ -670,6 +917,41 @@
   {
    "source": "src.research_assistant.agent.loop",
    "target": "src.research_assistant.llm",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.agent.prompts",
+   "target": "src.research_assistant.nlp.text",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.agent.reading",
+   "target": "src.research_assistant.agent.loop",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.agent.reading",
+   "target": "src.research_assistant.answer.citations",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.agent.reading",
+   "target": "src.research_assistant.llm",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.agent.reading",
+   "target": "src.research_assistant.nlp.text",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.agent.reading",
+   "target": "src.research_assistant.retrieval.papers",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.agent.reading",
+   "target": "src.research_assistant.store.db",
    "type": "imports"
   },
   {
@@ -754,12 +1036,22 @@
   },
   {
    "source": "src.research_assistant.agent.tools",
+   "target": "src.research_assistant.agent",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.agent.tools",
    "target": "src.research_assistant.ingest.models",
    "type": "imports"
   },
   {
    "source": "src.research_assistant.agent.tools",
    "target": "src.research_assistant.ingest.pipeline",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.agent.tools",
+   "target": "src.research_assistant.retrieval.papers",
    "type": "imports"
   },
   {
@@ -780,6 +1072,16 @@
   {
    "source": "src.research_assistant.cli",
    "target": "src.research_assistant.config",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.cli",
+   "target": "src.research_assistant.providers",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.cli",
+   "target": "src.research_assistant.ui.views",
    "type": "imports"
   },
   {
@@ -809,6 +1111,11 @@
   },
   {
    "source": "src.research_assistant.cli",
+   "target": "src.research_assistant.ingest.relevance",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.cli",
    "target": "src.research_assistant.ingest.robots",
    "type": "imports"
   },
@@ -830,6 +1137,11 @@
   {
    "source": "src.research_assistant.cli",
    "target": "src.research_assistant.nlp.annotate",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.cli",
+   "target": "src.research_assistant.ingest.resolve",
    "type": "imports"
   },
   {
@@ -869,12 +1181,42 @@
   },
   {
    "source": "src.research_assistant.cli",
+   "target": "src.research_assistant.agent.reading",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.cli",
+   "target": "src.research_assistant.agent.coverage",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.cli",
+   "target": "src.research_assistant.retrieval.rerank",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.cli",
    "target": "src.research_assistant.evaluation.entities",
    "type": "imports"
   },
   {
    "source": "src.research_assistant.cli",
    "target": "src.research_assistant.evaluation.agent",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.cli",
+   "target": "src.research_assistant.finetune.commands",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.cli",
+   "target": "src.research_assistant.mcp_server",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.config",
+   "target": "src.research_assistant.providers",
    "type": "imports"
   },
   {
@@ -900,6 +1242,11 @@
   {
    "source": "src.research_assistant.evaluation.agent",
    "target": "src.research_assistant.evaluation.retrieval",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.evaluation.agent",
+   "target": "src.research_assistant.nlp.text",
    "type": "imports"
   },
   {
@@ -933,6 +1280,176 @@
    "type": "imports"
   },
   {
+   "source": "src.research_assistant.finetune.commands",
+   "target": "src.research_assistant.config",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.finetune.commands",
+   "target": "src.research_assistant.finetune.questions",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.finetune.commands",
+   "target": "src.research_assistant.finetune.splits",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.finetune.commands",
+   "target": "src.research_assistant.finetune.trajectories",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.finetune.commands",
+   "target": "src.research_assistant.llm",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.finetune.commands",
+   "target": "src.research_assistant.evaluation.retrieval",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.finetune.commands",
+   "target": "src.research_assistant.store.db",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.finetune.commands",
+   "target": "src.research_assistant.agent.session",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.finetune.commands",
+   "target": "src.research_assistant.finetune.export",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.finetune.export",
+   "target": "src.research_assistant.agent.prompts",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.finetune.export",
+   "target": "src.research_assistant.agent.tools",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.finetune.export",
+   "target": "src.research_assistant.evaluation.retrieval",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.finetune.export",
+   "target": "src.research_assistant.finetune.trajectories",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.finetune.questions",
+   "target": "src.research_assistant.agent.tools",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.finetune.questions",
+   "target": "src.research_assistant.answer.citations",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.finetune.questions",
+   "target": "src.research_assistant.evaluation.retrieval",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.finetune.questions",
+   "target": "src.research_assistant.finetune.splits",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.finetune.questions",
+   "target": "src.research_assistant.llm",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.finetune.questions",
+   "target": "src.research_assistant.nlp.entities",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.finetune.questions",
+   "target": "src.research_assistant.nlp.text",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.finetune.questions",
+   "target": "src.research_assistant.store.db",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.finetune.splits",
+   "target": "src.research_assistant.ingest.models",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.finetune.splits",
+   "target": "src.research_assistant.nlp.text",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.finetune.splits",
+   "target": "src.research_assistant.store.db",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.finetune.trajectories",
+   "target": "src.research_assistant.agent",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.finetune.trajectories",
+   "target": "src.research_assistant.agent.loop",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.finetune.trajectories",
+   "target": "src.research_assistant.agent.prompts",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.finetune.trajectories",
+   "target": "src.research_assistant.agent.tools",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.finetune.trajectories",
+   "target": "src.research_assistant.evaluation.agent",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.finetune.trajectories",
+   "target": "src.research_assistant.evaluation.retrieval",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.finetune.trajectories",
+   "target": "src.research_assistant.llm",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.finetune.trajectories",
+   "target": "src.research_assistant.nlp.text",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.finetune.trajectories",
+   "target": "src.research_assistant.parse.pipeline",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.finetune.trajectories",
+   "target": "src.research_assistant.store.db",
+   "type": "imports"
+  },
+  {
    "source": "src.research_assistant.ingest.dedup",
    "target": "src.research_assistant.ingest.models",
    "type": "imports"
@@ -944,7 +1461,22 @@
   },
   {
    "source": "src.research_assistant.ingest.download",
+   "target": "src.research_assistant.ingest.landing",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.ingest.download",
    "target": "src.research_assistant.ingest.robots",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.ingest.landing",
+   "target": "src.research_assistant.ingest.models",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.ingest.landing",
+   "target": "src.research_assistant.nlp.text",
    "type": "imports"
   },
   {
@@ -970,6 +1502,41 @@
   {
    "source": "src.research_assistant.ingest.pipeline",
    "target": "src.research_assistant.store.db",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.ingest.relevance",
+   "target": "src.research_assistant.ingest.models",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.ingest.relevance",
+   "target": "src.research_assistant.nlp.entities",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.ingest.relevance",
+   "target": "src.research_assistant.nlp.text",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.ingest.resolve",
+   "target": "src.research_assistant.ingest.http",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.ingest.resolve",
+   "target": "src.research_assistant.ingest.landing",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.ingest.resolve",
+   "target": "src.research_assistant.ingest.models",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.ingest.resolve",
+   "target": "src.research_assistant.ingest.robots",
    "type": "imports"
   },
   {
@@ -1000,6 +1567,86 @@
   {
    "source": "src.research_assistant.ingest.sources.openalex",
    "target": "src.research_assistant.ingest.models",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.mcp_server",
+   "target": "src.research_assistant.agent",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.mcp_server",
+   "target": "src.research_assistant.agent.loop",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.mcp_server",
+   "target": "src.research_assistant.agent.tools",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.mcp_server",
+   "target": "src.research_assistant.answer.citations",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.mcp_server",
+   "target": "src.research_assistant.agent.coverage",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.mcp_server",
+   "target": "src.research_assistant.agent.reading",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.mcp_server",
+   "target": "src.research_assistant.agent.session",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.mcp_server",
+   "target": "src.research_assistant.cli",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.mcp_server",
+   "target": "src.research_assistant.llm",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.mcp_server",
+   "target": "src.research_assistant.retrieval.rerank",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.mcp_server",
+   "target": "src.research_assistant.ingest.download",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.mcp_server",
+   "target": "src.research_assistant.ingest.http",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.mcp_server",
+   "target": "src.research_assistant.ingest.robots",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.mcp_server",
+   "target": "src.research_assistant.ingest.sources.arxiv",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.mcp_server",
+   "target": "src.research_assistant.ingest.sources.openalex",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.mcp_server",
+   "target": "src.research_assistant.store.db",
    "type": "imports"
   },
   {
@@ -1083,6 +1730,21 @@
    "type": "imports"
   },
   {
+   "source": "src.research_assistant.retrieval.papers",
+   "target": "src.research_assistant.ingest.models",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.retrieval.papers",
+   "target": "src.research_assistant.nlp.text",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.retrieval.papers",
+   "target": "src.research_assistant.store.db",
+   "type": "imports"
+  },
+  {
    "source": "src.research_assistant.retrieval.rerank",
    "target": "src.research_assistant.nlp.entities",
    "type": "imports"
@@ -1115,6 +1777,106 @@
   {
    "source": "src.research_assistant.store.db",
    "target": "src.research_assistant.nlp.entities",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.ui.app",
+   "target": "src.research_assistant.agent.loop",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.ui.app",
+   "target": "src.research_assistant.agent.session",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.ui.app",
+   "target": "src.research_assistant.agent.tools",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.ui.app",
+   "target": "src.research_assistant.config",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.ui.app",
+   "target": "src.research_assistant.ingest.http",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.ui.app",
+   "target": "src.research_assistant.ingest.models",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.ui.app",
+   "target": "src.research_assistant.ingest.pipeline",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.ui.app",
+   "target": "src.research_assistant.ingest.sources.arxiv",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.ui.app",
+   "target": "src.research_assistant.ingest.sources.openalex",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.ui.app",
+   "target": "src.research_assistant.retrieval.papers",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.ui.app",
+   "target": "src.research_assistant.store.db",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.ui.app",
+   "target": "src.research_assistant.ui.chats",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.ui.app",
+   "target": "src.research_assistant.ui.views",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.ui.chats",
+   "target": "src.research_assistant.ui.views",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.ui.views",
+   "target": "src.research_assistant.agent.loop",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.ui.views",
+   "target": "src.research_assistant.answer.citations",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.ui.views",
+   "target": "src.research_assistant.ingest.models",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.ui.views",
+   "target": "src.research_assistant.nlp.text",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.ui.views",
+   "target": "src.research_assistant.retrieval.papers",
+   "type": "imports"
+  },
+  {
+   "source": "src.research_assistant.ui.views",
+   "target": "src.research_assistant.store.db",
    "type": "imports"
   },
   {
@@ -1170,6 +1932,11 @@
   {
    "source": "tests.test_agent",
    "target": "src.research_assistant.evaluation.retrieval",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_agent",
+   "target": "src.research_assistant.agent.prompts",
    "type": "imports"
   },
   {
@@ -1263,6 +2030,61 @@
    "type": "imports"
   },
   {
+   "source": "tests.test_eval_behaviour",
+   "target": "src.research_assistant.agent",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_eval_behaviour",
+   "target": "src.research_assistant.agent.loop",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_eval_behaviour",
+   "target": "src.research_assistant.agent.tools",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_eval_behaviour",
+   "target": "src.research_assistant.evaluation.agent",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_eval_behaviour",
+   "target": "src.research_assistant.evaluation.retrieval",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_eval_behaviour",
+   "target": "src.research_assistant.ingest.models",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_eval_behaviour",
+   "target": "src.research_assistant.llm",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_eval_behaviour",
+   "target": "src.research_assistant.parse.passages",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_eval_behaviour",
+   "target": "src.research_assistant.parse.structure",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_eval_behaviour",
+   "target": "src.research_assistant.retrieval.search",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_eval_behaviour",
+   "target": "src.research_assistant.store.db",
+   "type": "imports"
+  },
+  {
    "source": "tests.test_eval_retrieval",
    "target": "src.research_assistant.evaluation.retrieval",
    "type": "imports"
@@ -1293,6 +2115,161 @@
    "type": "imports"
   },
   {
+   "source": "tests.test_finetune_commands",
+   "target": "src.research_assistant.cli",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_finetune_commands",
+   "target": "src.research_assistant.config",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_finetune_commands",
+   "target": "src.research_assistant.finetune.commands",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_finetune_commands",
+   "target": "src.research_assistant.finetune.questions",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_finetune_commands",
+   "target": "src.research_assistant.ingest.models",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_finetune_commands",
+   "target": "src.research_assistant.parse.passages",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_finetune_commands",
+   "target": "src.research_assistant.parse.structure",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_finetune_commands",
+   "target": "src.research_assistant.store.db",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_finetune_export",
+   "target": "src.research_assistant.agent.prompts",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_finetune_export",
+   "target": "src.research_assistant.agent.tools",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_finetune_export",
+   "target": "src.research_assistant.evaluation.retrieval",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_finetune_export",
+   "target": "src.research_assistant.finetune.export",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_finetune_export",
+   "target": "src.research_assistant.finetune.trajectories",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_finetune_export",
+   "target": "src.research_assistant.ingest.models",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_finetune_export",
+   "target": "src.research_assistant.llm",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_finetune_export",
+   "target": "src.research_assistant.parse.passages",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_finetune_export",
+   "target": "src.research_assistant.parse.pipeline",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_finetune_export",
+   "target": "src.research_assistant.parse.structure",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_finetune_export",
+   "target": "src.research_assistant.retrieval.search",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_finetune_export",
+   "target": "src.research_assistant.store.db",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_finetune_questions",
+   "target": "src.research_assistant.evaluation.retrieval",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_finetune_questions",
+   "target": "src.research_assistant.finetune",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_finetune_questions",
+   "target": "src.research_assistant.finetune.questions",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_finetune_questions",
+   "target": "src.research_assistant.finetune.splits",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_finetune_questions",
+   "target": "src.research_assistant.ingest.models",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_finetune_questions",
+   "target": "src.research_assistant.llm",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_finetune_questions",
+   "target": "src.research_assistant.nlp.text",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_finetune_questions",
+   "target": "src.research_assistant.parse.passages",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_finetune_questions",
+   "target": "src.research_assistant.parse.structure",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_finetune_questions",
+   "target": "src.research_assistant.retrieval.search",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_finetune_questions",
+   "target": "src.research_assistant.store.db",
+   "type": "imports"
+  },
+  {
    "source": "tests.test_http",
    "target": "src.research_assistant.ingest.http",
    "type": "imports"
@@ -1303,6 +2280,81 @@
    "type": "imports"
   },
   {
+   "source": "tests.test_landing",
+   "target": "src.research_assistant.ingest.download",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_landing",
+   "target": "src.research_assistant.ingest.http",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_landing",
+   "target": "src.research_assistant.ingest.landing",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_landing",
+   "target": "src.research_assistant.ingest.models",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_landing",
+   "target": "src.research_assistant.ingest.resolve",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_landing",
+   "target": "src.research_assistant.ingest.robots",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_mcp_server",
+   "target": "src.research_assistant.agent.tools",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_mcp_server",
+   "target": "src.research_assistant.ingest.models",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_mcp_server",
+   "target": "src.research_assistant.mcp_server",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_mcp_server",
+   "target": "src.research_assistant.parse.passages",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_mcp_server",
+   "target": "src.research_assistant.parse.structure",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_mcp_server",
+   "target": "src.research_assistant.retrieval.search",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_mcp_server",
+   "target": "src.research_assistant.store.db",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_mcp_server",
+   "target": "src.research_assistant.agent.loop",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_mcp_server",
+   "target": "src.research_assistant.cli",
+   "type": "imports"
+  },
+  {
    "source": "tests.test_models",
    "target": "src.research_assistant.ingest.dedup",
    "type": "imports"
@@ -1310,6 +2362,46 @@
   {
    "source": "tests.test_models",
    "target": "src.research_assistant.ingest.models",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_papers",
+   "target": "src.research_assistant.agent.tools",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_papers",
+   "target": "src.research_assistant.ingest.models",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_papers",
+   "target": "src.research_assistant.parse.passages",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_papers",
+   "target": "src.research_assistant.parse.structure",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_papers",
+   "target": "src.research_assistant.retrieval.papers",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_papers",
+   "target": "src.research_assistant.retrieval.search",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_papers",
+   "target": "src.research_assistant.store.db",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_papers",
+   "target": "src.research_assistant.store.vectors",
    "type": "imports"
   },
   {
@@ -1348,6 +2440,16 @@
    "type": "imports"
   },
   {
+   "source": "tests.test_parse_pipeline",
+   "target": "src.research_assistant.parse.passages",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_parse_pipeline",
+   "target": "src.research_assistant.parse.structure",
+   "type": "imports"
+  },
+  {
    "source": "tests.test_pipeline",
    "target": "src.research_assistant.ingest.download",
    "type": "imports"
@@ -1364,6 +2466,86 @@
   },
   {
    "source": "tests.test_pipeline",
+   "target": "src.research_assistant.store.db",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_providers",
+   "target": "src.research_assistant.cli",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_providers",
+   "target": "src.research_assistant.config",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_providers",
+   "target": "src.research_assistant.providers",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_reading",
+   "target": "src.research_assistant.agent.coverage",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_reading",
+   "target": "src.research_assistant.agent.reading",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_reading",
+   "target": "src.research_assistant.ingest.models",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_reading",
+   "target": "src.research_assistant.llm",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_reading",
+   "target": "src.research_assistant.parse.passages",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_reading",
+   "target": "src.research_assistant.parse.structure",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_reading",
+   "target": "src.research_assistant.retrieval.search",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_reading",
+   "target": "src.research_assistant.store.db",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_relevance",
+   "target": "src.research_assistant.ingest.download",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_relevance",
+   "target": "src.research_assistant.ingest.models",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_relevance",
+   "target": "src.research_assistant.ingest.pipeline",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_relevance",
+   "target": "src.research_assistant.ingest.relevance",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_relevance",
    "target": "src.research_assistant.store.db",
    "type": "imports"
   },
@@ -1418,6 +2600,11 @@
    "type": "imports"
   },
   {
+   "source": "tests.test_search",
+   "target": "src.research_assistant.agent.tools",
+   "type": "imports"
+  },
+  {
    "source": "tests.test_sentences",
    "target": "src.research_assistant.parse.sentences",
    "type": "imports"
@@ -1451,15 +2638,620 @@
    "source": "tests.test_structure",
    "target": "src.research_assistant.parse.units",
    "type": "imports"
+  },
+  {
+   "source": "tests.test_tables",
+   "target": "src.research_assistant.agent.tools",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_tables",
+   "target": "src.research_assistant.ingest.models",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_tables",
+   "target": "src.research_assistant.parse.passages",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_tables",
+   "target": "src.research_assistant.parse.pdf",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_tables",
+   "target": "src.research_assistant.parse.pipeline",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_tables",
+   "target": "src.research_assistant.parse.structure",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_tables",
+   "target": "src.research_assistant.parse.units",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_tables",
+   "target": "src.research_assistant.retrieval.search",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_tables",
+   "target": "src.research_assistant.store.db",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_train_script",
+   "target": "src.research_assistant.agent.prompts",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_train_script",
+   "target": "src.research_assistant.agent.tools",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_train_script",
+   "target": "src.research_assistant.finetune.export",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_ui",
+   "target": "src.research_assistant.agent.loop",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_ui",
+   "target": "src.research_assistant.answer.citations",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_ui",
+   "target": "src.research_assistant.ingest.models",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_ui",
+   "target": "src.research_assistant.parse.passages",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_ui",
+   "target": "src.research_assistant.parse.structure",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_ui",
+   "target": "src.research_assistant.retrieval.papers",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_ui",
+   "target": "src.research_assistant.retrieval.search",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_ui",
+   "target": "src.research_assistant.store.db",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_ui",
+   "target": "src.research_assistant.ui.chats",
+   "type": "imports"
+  },
+  {
+   "source": "tests.test_ui",
+   "target": "src.research_assistant.ui.views",
+   "type": "imports"
+  },
+  {
+   "source": "ra.domain-library-filling",
+   "target": "ra.ingest",
+   "type": "contains"
+  },
+  {
+   "source": "ra.domain-library-filling",
+   "target": "ra.parse",
+   "type": "contains"
+  },
+  {
+   "source": "ra.domain-library-filling",
+   "target": "ra.annotation",
+   "type": "contains"
+  },
+  {
+   "source": "ra.domain-storage-search",
+   "target": "ra.store",
+   "type": "contains"
+  },
+  {
+   "source": "ra.domain-storage-search",
+   "target": "ra.retrieval",
+   "type": "contains"
+  },
+  {
+   "source": "ra.domain-answering",
+   "target": "ra.agent",
+   "type": "contains"
+  },
+  {
+   "source": "ra.domain-answering",
+   "target": "ra.ui",
+   "type": "contains"
+  },
+  {
+   "source": "ra.domain-answering",
+   "target": "ra.cli",
+   "type": "contains"
+  },
+  {
+   "source": "ra.domain-quality",
+   "target": "ra.evaluation",
+   "type": "contains"
+  },
+  {
+   "source": "ra.domain-distillation",
+   "target": "ra.finetune",
+   "type": "contains"
+  },
+  {
+   "source": "ra.domain-distillation",
+   "target": "ra.train-bundle",
+   "type": "contains"
+  },
+  {
+   "source": "ra.ingest",
+   "target": "ra.core-models",
+   "type": "contains"
+  },
+  {
+   "source": "ra.annotation",
+   "target": "ra.nlp-entities",
+   "type": "contains"
+  },
+  {
+   "source": "ra.annotation",
+   "target": "ra.core-text",
+   "type": "contains"
+  },
+  {
+   "source": "ra.store",
+   "target": "ra.store-db",
+   "type": "contains"
+  },
+  {
+   "source": "ra.retrieval",
+   "target": "ra.nlp-embed",
+   "type": "contains"
+  },
+  {
+   "source": "ra.retrieval",
+   "target": "ra.retrieval-search",
+   "type": "contains"
+  },
+  {
+   "source": "ra.retrieval",
+   "target": "ra.retrieval-papers",
+   "type": "contains"
+  },
+  {
+   "source": "ra.parse",
+   "target": "ra.parse-structure",
+   "type": "contains"
+  },
+  {
+   "source": "ra.agent",
+   "target": "ra.agent-session",
+   "type": "contains"
+  },
+  {
+   "source": "ra.agent",
+   "target": "ra.agent-loop",
+   "type": "contains"
+  },
+  {
+   "source": "ra.agent",
+   "target": "ra.agent-tools",
+   "type": "contains"
+  },
+  {
+   "source": "ra.agent",
+   "target": "ra.agent-prompts",
+   "type": "contains"
+  },
+  {
+   "source": "ra.agent",
+   "target": "ra.answer-citations",
+   "type": "contains"
+  },
+  {
+   "source": "ra.agent",
+   "target": "ra.core-llm",
+   "type": "contains"
+  },
+  {
+   "source": "ra.cli",
+   "target": "ra.core-config",
+   "type": "contains"
+  },
+  {
+   "source": "ra.evaluation",
+   "target": "ra.eval-data",
+   "type": "contains"
+  },
+  {
+   "source": "ra.evaluation",
+   "target": "ra.eval-agent",
+   "type": "contains"
+  },
+  {
+   "source": "ra.ui",
+   "target": "ra.ui-app",
+   "type": "contains"
+  },
+  {
+   "source": "ra.ui",
+   "target": "ra.ui-views",
+   "type": "contains"
+  },
+  {
+   "source": "ra.ui",
+   "target": "ra.ui-chats",
+   "type": "contains"
+  },
+  {
+   "source": "ra.finetune",
+   "target": "ra.ft-splits",
+   "type": "contains"
+  },
+  {
+   "source": "ra.finetune",
+   "target": "ra.ft-questions",
+   "type": "contains"
+  },
+  {
+   "source": "ra.finetune",
+   "target": "ra.ft-trajectories",
+   "type": "contains"
+  },
+  {
+   "source": "ra.finetune",
+   "target": "ra.ft-export",
+   "type": "contains"
+  },
+  {
+   "source": "ra.finetune",
+   "target": "ra.ft-commands",
+   "type": "contains"
+  },
+  {
+   "source": "ra.finetune",
+   "target": "ra.ft-template",
+   "type": "contains"
+  },
+  {
+   "source": "ra.train-bundle",
+   "target": "ra.train-sft",
+   "type": "contains"
+  },
+  {
+   "source": "ra.train-bundle",
+   "target": "ra.make-bundle",
+   "type": "contains"
+  },
+  {
+   "source": "ra.train-bundle",
+   "target": "ra.bundle-templates",
+   "type": "contains"
+  },
+  {
+   "source": "ra.train-bundle",
+   "target": "ra.colab-notebook",
+   "type": "contains"
+  },
+  {
+   "source": "ra.mcp",
+   "target": "ra.mcp-server",
+   "type": "contains"
+  },
+  {
+   "source": "ra.mcp",
+   "target": "ra.skill-research-library",
+   "type": "contains"
+  },
+  {
+   "source": "ra.cli",
+   "target": "ra.core-providers",
+   "type": "contains"
+  },
+  {
+   "source": "ra.agent",
+   "target": "ra.agent-reading",
+   "type": "contains"
+  },
+  {
+   "source": "ra.agent",
+   "target": "ra.agent-coverage",
+   "type": "contains"
+  },
+  {
+   "source": "ra.ingest",
+   "target": "ra.ingest-resolve",
+   "type": "contains"
+  },
+  {
+   "source": "ra.ingest",
+   "target": "ra.ingest-landing",
+   "type": "contains"
+  },
+  {
+   "source": "ra.ingest",
+   "target": "ra.ingest-relevance",
+   "type": "contains"
+  },
+  {
+   "source": "ra.domain-answering",
+   "target": "ra.mcp",
+   "type": "contains"
+  },
+  {
+   "source": "ra.cli",
+   "target": "ra.store",
+   "type": "depends_on",
+   "description": "17 рёбер imports (AST, 2026-11-24)"
+  },
+  {
+   "source": "ra.cli",
+   "target": "ra.agent",
+   "type": "depends_on",
+   "description": "15 рёбер imports (AST, 2026-11-24)"
+  },
+  {
+   "source": "ra.cli",
+   "target": "ra.ingest",
+   "type": "depends_on",
+   "description": "13 рёбер imports (AST, 2026-11-24)"
+  },
+  {
+   "source": "ra.cli",
+   "target": "ra.evaluation",
+   "type": "depends_on",
+   "description": "5 рёбер imports (AST, 2026-11-24)"
+  },
+  {
+   "source": "ra.cli",
+   "target": "ra.parse",
+   "type": "depends_on",
+   "description": "3 рёбер imports (AST, 2026-11-24)"
+  },
+  {
+   "source": "ra.cli",
+   "target": "ra.retrieval",
+   "type": "depends_on",
+   "description": "3 рёбер imports (AST, 2026-11-24)"
+  },
+  {
+   "source": "ra.cli",
+   "target": "ra.finetune",
+   "type": "depends_on",
+   "description": "3 рёбер imports (AST, 2026-11-24)"
+  },
+  {
+   "source": "ra.cli",
+   "target": "ra.annotation",
+   "type": "depends_on",
+   "description": "2 рёбер imports (AST, 2026-11-24)"
+  },
+  {
+   "source": "ra.cli",
+   "target": "ra.mcp",
+   "type": "depends_on",
+   "description": "2 рёбер imports (AST, 2026-11-24)"
+  },
+  {
+   "source": "ra.cli",
+   "target": "ra.ui",
+   "type": "depends_on",
+   "description": "1 рёбер imports (AST, 2026-11-24); ui.views.friendly_error; сам интерфейс — подпроцесс streamlit run"
+  },
+  {
+   "source": "ra.ui",
+   "target": "ra.agent",
+   "type": "depends_on",
+   "description": "5 рёбер imports (AST, 2026-11-24)"
+  },
+  {
+   "source": "ra.ui",
+   "target": "ra.ingest",
+   "type": "depends_on",
+   "description": "4 рёбер imports (AST, 2026-11-24)"
+  },
+  {
+   "source": "ra.ui",
+   "target": "ra.retrieval",
+   "type": "depends_on",
+   "description": "2 рёбер imports (AST, 2026-11-24)"
+  },
+  {
+   "source": "ra.ui",
+   "target": "ra.store",
+   "type": "depends_on",
+   "description": "2 рёбер imports (AST, 2026-11-24)"
+  },
+  {
+   "source": "ra.agent",
+   "target": "ra.retrieval",
+   "type": "depends_on",
+   "description": "9 рёбер imports (AST, 2026-11-24)"
+  },
+  {
+   "source": "ra.agent",
+   "target": "ra.store",
+   "type": "depends_on",
+   "description": "6 рёбер imports (AST, 2026-11-24)"
+  },
+  {
+   "source": "ra.agent",
+   "target": "ra.ingest",
+   "type": "depends_on",
+   "description": "6 рёбер imports (AST, 2026-11-24)"
+  },
+  {
+   "source": "ra.agent",
+   "target": "ra.parse",
+   "type": "depends_on",
+   "description": "1 рёбер imports (AST, 2026-11-24)"
+  },
+  {
+   "source": "ra.agent",
+   "target": "ra.annotation",
+   "type": "depends_on",
+   "description": "1 рёбер imports (AST, 2026-11-24)"
+  },
+  {
+   "source": "ra.mcp",
+   "target": "ra.agent",
+   "type": "depends_on",
+   "description": "11 рёбер imports (AST, 2026-11-24)"
+  },
+  {
+   "source": "ra.mcp",
+   "target": "ra.ingest",
+   "type": "depends_on",
+   "description": "5 рёбер imports (AST, 2026-11-24)"
+  },
+  {
+   "source": "ra.mcp",
+   "target": "ra.retrieval",
+   "type": "depends_on",
+   "description": "1 рёбер imports (AST, 2026-11-24)"
+  },
+  {
+   "source": "ra.mcp",
+   "target": "ra.store",
+   "type": "depends_on",
+   "description": "1 рёбер imports (AST, 2026-11-24)"
+  },
+  {
+   "source": "ra.mcp",
+   "target": "ra.cli",
+   "type": "depends_on",
+   "description": "1 рёбер imports (AST, 2026-11-24); ленивый импорт cli.format_agent_result в ask_agent: зависимость вверх"
+  },
+  {
+   "source": "ra.evaluation",
+   "target": "ra.agent",
+   "type": "depends_on",
+   "description": "5 рёбер imports (AST, 2026-11-24); в том числе приватный _call_key из agent/loop.py"
+  },
+  {
+   "source": "ra.evaluation",
+   "target": "ra.store",
+   "type": "depends_on",
+   "description": "2 рёбер imports (AST, 2026-11-24)"
+  },
+  {
+   "source": "ra.evaluation",
+   "target": "ra.annotation",
+   "type": "depends_on",
+   "description": "1 рёбер imports (AST, 2026-11-24)"
+  },
+  {
+   "source": "ra.finetune",
+   "target": "ra.agent",
+   "type": "depends_on",
+   "description": "13 рёбер imports (AST, 2026-11-24)"
+  },
+  {
+   "source": "ra.finetune",
+   "target": "ra.evaluation",
+   "type": "depends_on",
+   "description": "7 рёбер imports (AST, 2026-11-24)"
+  },
+  {
+   "source": "ra.finetune",
+   "target": "ra.store",
+   "type": "depends_on",
+   "description": "6 рёбер imports (AST, 2026-11-24)"
+  },
+  {
+   "source": "ra.finetune",
+   "target": "ra.annotation",
+   "type": "depends_on",
+   "description": "1 рёбер imports (AST, 2026-11-24)"
+  },
+  {
+   "source": "ra.finetune",
+   "target": "ra.parse",
+   "type": "depends_on",
+   "description": "1 рёбер imports (AST, 2026-11-24)"
+  },
+  {
+   "source": "ra.ingest",
+   "target": "ra.store",
+   "type": "depends_on",
+   "description": "1 рёбер imports (AST, 2026-11-24)"
+  },
+  {
+   "source": "ra.ingest",
+   "target": "ra.annotation",
+   "type": "depends_on",
+   "description": "1 рёбер imports (AST, 2026-11-24)"
+  },
+  {
+   "source": "ra.parse",
+   "target": "ra.store",
+   "type": "depends_on",
+   "description": "1 рёбер imports (AST, 2026-11-24)"
+  },
+  {
+   "source": "ra.annotation",
+   "target": "ra.store",
+   "type": "depends_on",
+   "description": "1 рёбер imports (AST, 2026-11-24)"
+  },
+  {
+   "source": "ra.retrieval",
+   "target": "ra.store",
+   "type": "depends_on",
+   "description": "3 рёбер imports (AST, 2026-11-24)"
+  },
+  {
+   "source": "ra.retrieval",
+   "target": "ra.annotation",
+   "type": "depends_on",
+   "description": "1 рёбер imports (AST, 2026-11-24); rerank.py берёт parse_json из nlp/entities.py"
+  },
+  {
+   "source": "ra.store",
+   "target": "ra.annotation",
+   "type": "depends_on",
+   "description": "1 рёбер imports (AST, 2026-11-24); db.py берёт contains_stems из nlp/entities.py: зависимость вверх"
+  },
+  {
+   "source": "ra.train-bundle",
+   "target": "ra.finetune",
+   "type": "depends_on",
+   "description": "не import: файлы sft/*.jsonl, чат-шаблон, prompt_hash (inferred from manual inspection)"
   }
  ],
  "metadata": {
-  "total_files": 62,
-  "total_lines": 7020,
+  "total_files": 107,
+  "total_lines": 19139,
   "languages": [
+   "bash",
    "python"
   ],
-  "git_commits_analyzed": 6,
-  "analysis_days": 90
+  "module_only_languages": [
+   "bash"
+  ],
+  "git_commits_analyzed": 0,
+  "analysis_days": 90,
+  "git_note": "на этой машине нет .git (проект развёрнут из архива); raw/git_stats.json — снимок 2026-11-09 с исходной машины"
  }
 }

@@ -113,3 +113,22 @@ def test_find_papers_tool_and_search_by_paper_ids(lib):
 
     only_second = search_library(ctx, "verification draft tokens", paper_ids=[2])
     assert "paper 2:" in only_second and "paper 1:" not in only_second
+
+
+# --- сервер эмбеддингов недоступен ---
+
+class BrokenDenseSearcher:
+    dense_ready = True
+    dense_failed = None
+
+    def search(self, *args, **kwargs):
+        raise RuntimeError("Error code: 400")
+
+
+def test_find_papers_survives_a_dead_embedding_server(lib):
+    searcher = BrokenDenseSearcher()
+    hits = find_papers(lib, "draft tokens", searcher=searcher)
+    assert [h.paper["title"] for h in hits] == ["Speculative decoding with a weak draft model"]
+    assert "RuntimeError" in searcher.dense_failed
+    searcher.search = None  # второй раз сервер уже не спрашиваем
+    assert len(find_papers(lib, "draft tokens", searcher=searcher)) == 1

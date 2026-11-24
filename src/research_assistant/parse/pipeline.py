@@ -12,12 +12,13 @@ from research_assistant.parse.structure import Document, Paragraph, build_docume
 from research_assistant.store.db import Library
 
 # Увеличивать при изменении правил разбора: тогда `parse` переразберёт старые статьи.
-PARSER_VERSION = 1
+# 2 — таблицы с числами: отдельные фрагменты kind="table", строка таблицы — «предложение» с ячейками через « | ».
+PARSER_VERSION = 2
 
 
 @dataclass
 class ParseOutcome:
-    status: str  # ok | metadata | empty | failed
+    status: str  # ok | metadata | empty | failed | kept (нет файла, оставлен прежний разбор)
     parser: str | None
     sections: int = 0
     passages: int = 0
@@ -46,6 +47,13 @@ def metadata_sections(abstract: str | None) -> list[SectionOut]:
 
 def parse_paper(library: Library, paper) -> ParseOutcome:
     error = None
+    if paper["fulltext_status"] == "ok" and paper["fulltext_path"] and not Path(paper["fulltext_path"]).exists():
+        # Базу перенесли на другую машину без PDF: переразбор новой версией парсера заменил бы полный разбор
+        # одной аннотацией. Прежний разбор ценнее, чем новая версия правил.
+        previous = library.get_parse(paper["id"])
+        if previous is not None and previous["status"] == "ok":
+            return ParseOutcome("kept", previous["parser"],
+                                error="файла полного текста нет на диске — оставлен прежний разбор")
     if paper["fulltext_status"] == "ok" and paper["fulltext_path"]:
         try:
             document, n_pages = parse_fulltext(paper["fulltext_path"], paper["fulltext_kind"], paper["title"])
@@ -56,6 +64,8 @@ def parse_paper(library: Library, paper) -> ParseOutcome:
                     has_abstract=document.has_abstract, n_pages=n_pages,
                 )
                 return ParseOutcome("ok", paper["fulltext_kind"], **counts)
+            # Скан без текстового слоя, пустая страница: статус failed, чтобы parse не пробовал его каждый раз.
+            error = "в файле полного текста не нашлось текста (скан без текстового слоя?)"
         except Exception as exc:  # битый PDF не должен останавливать разбор остальных
             error = f"{type(exc).__name__}: {exc}"
 

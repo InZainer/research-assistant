@@ -93,3 +93,56 @@ def test_search_sources_keeps_only_papers_of_the_author():
     assert source.kwargs == {"query": "", "author": "Geoffrey Hinton"}
     assert [r.title for r in result.records] == ["Layer normalization for recurrent networks"]
     assert len(search_sources([Source()], "layer").records) == 2  # без автора не фильтруем
+
+
+def test_fulltexts_are_fetched_from_different_hosts_in_turn():
+    from research_assistant.ingest.pipeline import interleave_by_host
+
+    def row(number, **fields):
+        return {"id": number, "arxiv_id": None, "pdf_url": None, "landing_url": None, "doi": None, **fields}
+
+    papers = [row(1, arxiv_id="2401.00001"), row(2, arxiv_id="2401.00002"), row(3, arxiv_id="2401.00003"),
+              row(4, pdf_url="https://mdpi.com/a.pdf"), row(5, doi="10.1/x"), row(6, pdf_url="https://mdpi.com/b.pdf"),
+              row(7)]
+    order = [p["id"] for p in interleave_by_host(papers)]
+    assert sorted(order) == [1, 2, 3, 4, 5, 6, 7]
+    assert order[:4] == [1, 4, 5, 7]  # по одной статье с каждого сайта, начиная с самого большого
+    assert order[4:] == [2, 6, 3]  # arXiv с его паузой в 15 с чередуется с остальными, пока они есть
+
+
+def test_fulltexts_in_several_threads_keep_one_host_in_one_thread():
+    import threading
+
+    from research_assistant.ingest.pipeline import fetch_fulltexts, split_by_host
+
+    class ThreadFetcher:
+        def __init__(self):
+            self.threads = {}
+
+        def fetch(self, paper):
+            host = "arxiv" if paper["arxiv_id"] else "journal"
+            self.threads.setdefault(host, set()).add(threading.get_ident())
+            if paper["title"].startswith("Broken"):
+                raise RuntimeError("boom")
+            return FulltextResult("ok", path=f"{paper['id']}.pdf", kind="pdf")
+
+    records = [PaperRecord(title=f"Arxiv paper number {i} on decoding", sources=["arxiv"], arxiv_id=f"2401.0000{i}")
+               for i in range(5)]
+    records += [PaperRecord(title=f"Journal paper number {i} on decoding", sources=["openalex"],
+                            openalex_id=f"W{i}", pdf_url=f"https://journal.org/{i}.pdf") for i in range(4)]
+    records.append(PaperRecord(title="Broken paper that makes the fetcher fail", sources=["openalex"],
+                               openalex_id="W99", pdf_url="https://journal.org/99.pdf"))
+    with Library(":memory:") as library:
+        topic_id = library.get_or_create_topic("t")
+        for record in records:
+            library.link_topic(library.upsert_paper(record)[0], topic_id)
+        buckets = split_by_host(library.papers_for_fulltext(topic_id), workers=3)
+        assert sorted(len(b) for b in buckets) == [5, 5]  # два сайта — два потока, третий не нужен
+
+        fetcher, counter, lines = ThreadFetcher(), {"ok": 0, "failed": 0}, []
+        fetch_fulltexts(library, topic_id, fetcher, ("pending",), counter, lines.append, workers=3)
+        assert counter == {"ok": 9, "failed": 1} and len(lines) == 10
+        assert all(len(threads) == 1 for threads in fetcher.threads.values())  # один сайт — один поток
+        assert library.papers_for_fulltext(topic_id) == []  # статусы записаны в базу вызывающим потоком
+        failed = library.papers_for_fulltext(topic_id, ("failed",))
+        assert len(failed) == 1 and "RuntimeError: boom" in failed[0]["fulltext_error"]

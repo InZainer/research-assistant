@@ -361,3 +361,62 @@ def test_add_papers_only_when_user_asks(ctx):
         [call("final_answer", {"answer": "Добавил.", "claims": [], "not_found": True})],
     ]))
     assert len(added) == 1
+
+
+def test_repeated_call_is_not_executed_again(ctx):
+    from research_assistant.agent.loop import REPEATED_CALL
+
+    sid = sentence_id(ctx, "Speedup drops")
+    script = [
+        [call("search_library", {"query": "Why does SPEEDUP drop?"})],  # тот же поиск, что сделал код на шаге 0
+        [call("read_passage", {"passage_id": "p1"})],
+        [call("read_passage", {"passage_id": "p1"})],
+        [call("final_answer", {"answer": "ok", "claims": [{"text": "t", "sentence_ids": [f"s{sid}"]}]})],
+    ]
+    client = ScriptedClient(script)
+    result = run_agent("why does speedup drop?", ctx, ChatModel("fake", client=client), prefetch=True)
+    tool_messages = [m["content"] for m in result.messages if m["role"] == "tool"]
+    assert tool_messages[1].startswith(REPEATED_CALL) and tool_messages[3].startswith(REPEATED_CALL)
+    assert not tool_messages[2].startswith(REPEATED_CALL)
+    assert result.stop_reason == "final_answer" and result.tool_errors == 0
+    assert [m["role"] for m in result.messages][:4] == ["system", "user", "assistant", "tool"]
+    assert {t["function"]["name"] for t in result.tools} >= {"search_library", "final_answer"}
+
+
+# --- бюджет и подсказки облачной модели ---
+
+def test_truncate_cuts_at_a_line_boundary():
+    from research_assistant.agent.loop import _truncate
+
+    text = "\n".join(f"  [s{i}] sentence number {i} of the passage" for i in range(40))
+    cut = _truncate(text, 400)
+    body, note = cut.rsplit("\n", 1)
+    assert note.startswith("… [truncated,") and len(body) <= 400
+    assert body.splitlines()[-1] in text.splitlines()  # последняя строка целая, а не обрывок предложения
+    assert _truncate("short", 400) == "short"
+
+
+def test_hints_are_added_to_the_system_prompt_but_not_to_the_prompt_hash(ctx):
+    from research_assistant.agent.prompts import DETAIL_HINT, LANGUAGE_HINTS, SYSTEM_PROMPT
+    from research_assistant.agent.tools import prompt_hash
+
+    before = prompt_hash()
+    client = ScriptedClient([[call("final_answer", {"answer": "нет", "claims": [], "not_found": True})]] * 3)
+    chat = ChatModel("fake", client=client)
+    run_agent("Why does the speedup drop?", ctx, chat, hints=True)
+    run_agent("Почему падает ускорение?", ctx, chat, hints=True)
+    run_agent("Почему падает ускорение?", ctx, chat)
+    english, russian, plain = (r["messages"][0]["content"] for r in client.requests)
+    assert english == SYSTEM_PROMPT + "\n" + LANGUAGE_HINTS["en"] + "\n" + DETAIL_HINT
+    assert LANGUAGE_HINTS["ru"] in russian and plain == SYSTEM_PROMPT
+    assert prompt_hash() == before
+
+
+def test_research_budget_and_observation_length_are_parameters(ctx):
+    search = [call("search_library", {"query": "draft model"})]
+    client = ScriptedClient([search, [call("final_answer", {"answer": "нет", "claims": [], "not_found": True})]])
+    run_agent("q", ctx, ChatModel("fake", client=client), research_calls=1, observation_chars=120)
+    names = [[t["function"]["name"] for t in r["tools"]] for r in client.requests]
+    assert len(names[0]) > 1 and names[1] == ["final_answer"]  # бюджет в один поиск исчерпан
+    observation = last_tool_observation(client.requests[1]["messages"])
+    assert "[truncated," in observation and "No more searching" in observation

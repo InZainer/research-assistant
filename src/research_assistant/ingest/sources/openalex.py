@@ -18,6 +18,8 @@ SELECT = (
     "abstract_inverted_index,primary_location,best_oa_location,locations"
 )
 MAX_PER_PAGE = 200
+# Потолок на один запрос: глубже 2000 результатов поиск OpenAlex отдаёт в основном шум.
+MAX_LIMIT = 2000
 # Один человек в OpenAlex часто разбит на несколько профилей («Geoffrey E. Hinton», «Hinton Geoffrey»).
 MAX_AUTHOR_PROFILES = 5
 
@@ -29,10 +31,17 @@ def build_params(
     year_to: int | None = None,
     language: str | None = None,
     author_ids: list[str] | None = None,
+    open_access_only: bool = True,
+    country: str | None = None,
 ) -> dict:
-    """Только статьи в открытом доступе: без полного текста они проекту не нужны.
-    С author_ids — работы этих профилей авторов; без запроса они сортируются по цитированиям."""
-    filters = ["is_oa:true"]
+    """По умолчанию только статьи в открытом доступе: у них есть полный текст. open_access_only=False —
+    ещё и закрытые: в библиотеку попадёт их аннотация (см. OpenAlexSource.search).
+    С author_ids — работы этих профилей авторов; без запроса они сортируются по цитированиям.
+    country — двухбуквенный код страны организаций авторов (RU): так находятся работы российских авторов,
+    у которых название и аннотация в OpenAlex записаны по-английски и русским запросом не ищутся."""
+    filters = ["is_oa:true"] if open_access_only else []
+    if country:
+        filters.append(f"authorships.institutions.country_code:{country.upper()}")
     if author_ids:
         filters.append("author.id:" + "|".join(author_ids))
     if year_from and year_to:
@@ -43,7 +52,9 @@ def build_params(
         filters.append(f"publication_year:<{year_to + 1}")
     if language:
         filters.append(f"language:{language}")
-    params = {"filter": ",".join(filters), "per_page": min(limit, MAX_PER_PAGE), "select": SELECT}
+    params = {"per_page": min(limit, MAX_PER_PAGE), "select": SELECT}
+    if filters:
+        params["filter"] = ",".join(filters)
     if query and query.strip():
         params["search"] = query
     else:
@@ -93,10 +104,13 @@ def parse_work(work: dict) -> PaperRecord | None:
 class OpenAlexSource:
     name = "openalex"
 
-    def __init__(self, http: HttpClient, mailto: str | None = None, api_key: str | None = None):
+    def __init__(self, http: HttpClient, mailto: str | None = None, api_key: str | None = None,
+                 open_access_only: bool = True, country: str | None = None):
         self.http = http
         self.mailto = mailto
         self.api_key = api_key
+        self.open_access_only = open_access_only
+        self.country = country
         http.set_interval(API_HOST, MIN_INTERVAL)
 
     def search(
@@ -113,9 +127,37 @@ class OpenAlexSource:
             author_ids = self.author_ids(author)
             if not author_ids:
                 return []
-        params = self._auth(build_params(query, limit, year_from, year_to, language, author_ids))
-        data = self.http.get_json(API_URL, params)
-        return [r for r in (parse_work(w) for w in data.get("results", [])) if r is not None]
+        limit = max(1, min(int(limit), MAX_LIMIT))
+        params = self._auth(build_params(query, limit, year_from, year_to, language, author_ids,
+                                         self.open_access_only, self.country))
+        if limit <= MAX_PER_PAGE:
+            works = self.http.get_json(API_URL, params).get("results", [])
+        else:
+            works = self._all_pages(params, limit)
+        records = [r for r in (parse_work(w) for w in works) if r is not None]
+        if not self.open_access_only:
+            # Закрытая статья без аннотации — одно название: искать и цитировать в ней нечего.
+            records = [r for r in records if r.abstract or r.pdf_url or r.arxiv_id]
+        return records
+
+    def _all_pages(self, params: dict, limit: int) -> list[dict]:
+        """Больше 200 результатов — постранично по курсору (cursor=* → meta.next_cursor)."""
+        works: list[dict] = []
+        cursor = "*"
+        while cursor and len(works) < limit:
+            data = self.http.get_json(API_URL, {**params, "per_page": MAX_PER_PAGE, "cursor": cursor})
+            page = data.get("results", [])
+            works.extend(page)
+            cursor = (data.get("meta") or {}).get("next_cursor")
+            if not page:
+                break
+        return works[:limit]
+
+    def by_doi(self, doi: str) -> PaperRecord | None:
+        """Одна работа по DOI (для команды add); None — OpenAlex её не знает."""
+        params = self._auth({"filter": f"doi:{doi}", "per_page": 1, "select": SELECT})
+        works = self.http.get_json(API_URL, params).get("results", [])
+        return parse_work(works[0]) if works else None
 
     def author_ids(self, name: str) -> list[str]:
         """Профили авторов OpenAlex с этим именем. Поиск авторов нечёткий («Geoffrey Hinton» находит и Yoshua

@@ -10,31 +10,39 @@
 
 ## Команды
 
-- Установка: `uv sync`
+- Установка: `uv sync`; развёртывание и запуск на новой машине — [AGENT.md](AGENT.md); архив проекта — `uv run python scripts/make_project_bundle.py` (→ `dist/research_assistant_bundle.zip`)
 - Тесты: `uv run pytest`
 - Проверка провайдера модели: `uv run research-assistant check`
-- Сбор и разбор: `uv run research-assistant ingest "<тема>"`, `parse`, `show <id>` (подробнее в README)
+- Сбор и разбор: `uv run research-assistant ingest "<тема>"`, `parse`, `show <id>` (подробнее в README). Широкая тема — набором запросов: `--query` несколько раз или `--queries-file`, отсев постороннего `--require "слово|слово"`, `--include-closed`, `--country RU`; одна статья по DOI, arXiv или адресу страницы — `add <ссылка> --topic "<тема>"`. Наборы запросов и скрипт — `queries/`
+- Чтение целиком и проверка новизны: `read <id> [--aspect "…"] [--question "…"]` (вся статья по порядку: находки с цитатами, чего нет, расхождения), `coverage "<аспект>" --topic "<тема>"` (вердикт по каждой статье темы); журналы `runs/read-*.jsonl`, `runs/coverage-*.jsonl`
 - Поиск и его оценка: `search "<запрос>"`, `index` (эмбеддинги), `eval-retrieval`
 - Агент: `ask "<вопрос>"`, `chat`; журналы прогонов в `runs/*.jsonl`; оценка — `eval-agent --variant agent|single|quotes|prefetch`, пересчёт по журналу — `--rescore`
 - Разметка: `annotate`, `entities`, `eval-entities`; при изменении промпта или правил — увеличить `ANNOTATOR_VERSION` в `nlp/annotate.py`
 - Веб-интерфейс: `uv run research-assistant ui` (Streamlit, http://localhost:8501)
+- Внешние агенты (docs/mcp.md): MCP-сервер `uv run research-assistant mcp` (stdio; по умолчанию только чтение, `--allow-model` — платные инструменты, `--allow-write` — пополнение библиотеки), конфиг для Claude Code — `.mcp.json`; навык для Claude Code и Hermes — `skills/research-library/SKILL.md`
+- Дообучение (docs/finetune.md): `ft-split`, `ft-questions`, `ft-collect`, `ft-export`; пакет для обучения на RTX 5070 — `uv run python scripts/make_train_bundle.py` (→ `dist/rtx5070_train_bundle.zip`). Промпт и схемы инструментов привязаны к датасету через `prompt_hash`: их изменение делает датасет и дообученную модель несовместимыми.
 
 ## Где что лежит
 
-- `src/research_assistant/` — код пакета. Модули по слоям: `ingest/` (сбор), `parse/` (разбор текстов), `store/` (SQLite, FTS5, векторы), `nlp/` (анализатор, эмбеддинги), `retrieval/` (поиск), `evaluation/` (метрики), `agent/` (цикл, инструменты, промпт), `answer/` (цитаты), `ui/` (Streamlit: логика в `views.py`, виджеты в `app.py`).
+- `src/research_assistant/` — код пакета. Модули по слоям: `ingest/` (сбор), `parse/` (разбор текстов), `store/` (SQLite, FTS5, векторы), `nlp/` (анализатор, эмбеддинги), `retrieval/` (поиск), `evaluation/` (метрики), `agent/` (цикл, инструменты, промпт), `answer/` (цитаты), `ui/` (Streamlit: логика в `views.py`, виджеты в `app.py`), `mcp_server.py` (MCP для внешних агентов).
+- `skills/` — навыки (`SKILL.md`) для внешних агентов; меняешь инструменты MCP — обнови навык.
 - `tests/` — тесты pytest, по файлу на модуль.
 - `eval/` — наборы вопросов и задач, скрипты метрик.
+- `queries/` — наборы поисковых запросов для сбора тем и скрипт `collect.sh`.
 - `runs/` — журналы прогонов агента в JSONL (коммитятся только те, что нужны для отчёта).
 - `data/` — PDF, база SQLite, векторы. Не коммитится.
 - `docs/` — отчёт и схемы.
 
 ## Правила
 
-- Модель вызывается только через OpenAI-совместимый API; настройки берутся из `.env` (`OPENAI_BASE_URL`, `OPENAI_API_KEY`, `MODEL`). Ключи никогда не пишутся в код, тесты и ноутбуки.
+- Модель вызывается только через OpenAI-совместимый API. Провайдер выбирается `LLM_PROVIDER` в `.env` или флагом `--provider` (профили — `src/research_assistant/providers.py`, список — команда `providers`); без `LLM_PROVIDER` действует прежняя схема `OPENAI_BASE_URL`, `OPENAI_API_KEY`, `MODEL`. Переменные профилей — с префиксом `LLM_<ИМЯ>_`, чтобы не пересекаться с переменными SDK и Claude Code. Ключи никогда не пишутся в код, тесты и ноутбуки; в выводе — только «задан / не задан».
 - Агентный цикл свой, без фреймворков: лимит шагов, ошибка инструмента возвращается модели как наблюдение, а не роняет цикл; каждый шаг пишется в JSONL с `usage`.
 - Инструменты возвращают сжатый результат (топ-k, обрезанный текст, ID), а не весь ответ базы.
 - Цитаты в ответе — только по ID предложений из базы; текст цитаты подставляет код. Инвариант: `sentences.text == passages.text[char_start:char_end]`.
 - Меняешь правила разбора в `parse/` — увеличь `PARSER_VERSION` в `parse/pipeline.py` и проверь результат через `show` на нескольких статьях разных форматов.
+- Улучшения ответа для облачных моделей — в подсказках `agent/prompts.py` (`answer_hints`) и в настройках бюджета (`config.py`), а не в `SYSTEM_PROMPT` и `SCHEMAS`: так `prompt_hash` не меняется. Команды `read` и `coverage` — отдельные от агента вызовы модели со своими схемами, в `prompt_hash` они не входят.
+- MCP-сервер берёт функции из `agent/tools.py`, но описания у него свои (копия параметров): правка инструментов MCP не должна менять `SCHEMAS` и `prompt_hash`. Протокол — только через stdout; всё прочее (print, логи) уходит в stderr. Внешний агент цитирует через инструмент `cite`, текст подставляет код.
+- Отчёты `read` и `coverage` соблюдают тот же инвариант цитат: модель называет ID предложений, текст подставляет код; утверждение без верного ID отбрасывается.
 - Тесты не ходят в сеть и не вызывают модель: внешние API и модель подменяются заглушками.
 - Новый модуль — вместе с тестом. Перед завершением задачи `uv run pytest` должен проходить.
 - Код и идентификаторы — на английском, комментарии, документация и сообщения пользователю — на русском.

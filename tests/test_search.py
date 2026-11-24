@@ -254,3 +254,79 @@ def test_search_with_translation_and_rerank(library):
     assert "rerank" in reranked[0].ranks
     baseline = searcher.search("model", k=10, mode="bm25")
     assert [h.passage_id for h in reranked] == [h.passage_id for h in reversed(baseline)]
+
+
+def test_hybrid_survives_embedding_server_down(library, tmp_path):
+    index = VectorIndex(tmp_path / "vectors.npz")
+    build_index(library, FakeEmbedder(), index)
+
+    class DownEmbedder(FakeEmbedder):
+        calls = 0
+
+        def embed_query(self, text):
+            DownEmbedder.calls += 1
+            raise ConnectionError("LM Studio is off")
+
+    searcher = Searcher(library, DownEmbedder(), index)
+    hits = searcher.search("verification", k=2, mode="hybrid")
+    assert hits and set(hits[0].ranks) == {"bm25"} and "BM25" in searcher.last_warning
+
+    from research_assistant.agent.tools import ToolContext, search_library
+
+    text = search_library(ToolContext(library=library, searcher=searcher), "verification")
+    assert text.startswith("[Semantic search is unavailable")
+    assert DownEmbedder.calls == 1  # после первой неудачи выключенный сервер больше не ждём
+    with pytest.raises(ConnectionError):
+        searcher.search("verification", mode="dense")  # явный плотный поиск ошибку не прячет
+
+    healthy = Searcher(library, FakeEmbedder(), index)
+    healthy.search("verification", k=2, mode="hybrid")
+    assert healthy.last_warning is None
+
+
+# --- поиск без эмбеддингов: перевод запроса в обе стороны ---
+
+class FakeTranslator:
+    def __init__(self):
+        self.asked = []
+
+    def to_english(self, query):
+        self.asked.append(("en", query))
+        return "draft model proposes tokens" if detect_language(query) == "ru" else None
+
+    def to_russian(self, query):
+        self.asked.append(("ru", query))
+        return "нейронные сети точность диагностики" if detect_language(query) == "en" else None
+
+
+def test_hybrid_without_embeddings_searches_by_translated_query(library):
+    question = "черновая модель предлагает токены"
+    assert Searcher(library).search(question, k=3) == []  # BM25 по русским словам английскую статью не находит
+    searcher = Searcher(library, translator=FakeTranslator())
+    hits = searcher.search(question, k=3)
+    assert hits[0].passage["title"] == "Speculative decoding with draft models" and "bm25_en" in hits[0].ranks
+    english = searcher.search("accuracy of neural networks in diagnostics", k=3)
+    assert english[0].passage["language"] == "ru" and "bm25_ru" in english[0].ranks
+    assert searcher.search(question, k=3, mode="bm25") == []  # явный BM25 остаётся как был
+
+
+def test_translation_is_not_used_when_dense_search_covers_the_library(library, tmp_path):
+    index = VectorIndex(tmp_path / "v.npz")
+    embedder = FakeEmbedder()
+    build_index(library, embedder, index)
+    translator = FakeTranslator()
+    searcher = Searcher(library, embedder, index, translator=translator)
+    searcher.search("черновая модель предлагает токены", k=3)
+    assert translator.asked == []
+    searcher.index_partial = True  # новые статьи ещё не проиндексированы
+    searcher.search("черновая модель предлагает токены", k=3)
+    assert translator.asked[0] == ("en", "черновая модель предлагает токены")
+
+
+def test_query_prefixes_of_instruct_models():
+    assert prefixes_for("text-embedding-multilingual-e5-large-instruct")[0].startswith("Instruct: ")
+    assert prefixes_for("text-embedding-multilingual-e5-large-instruct")[1] == ""  # не «passage: » обычных e5
+    assert prefixes_for("snowflake-arctic-embed-l-v2.0") == ("query: ", "")
+    assert prefixes_for("FRIDA-q8_0") == ("search_query: ", "search_document: ")
+    assert prefixes_for("giga-embeddings-0826-480m")[1] == ""
+    assert prefixes_for("text-embedding-qwen3-embedding-4b")[0].endswith("Query: ")
